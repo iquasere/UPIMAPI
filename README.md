@@ -1,2 +1,3 @@
 # UPIMAPI
-UniProt Id Mapping through its API
+
+UniProt Id Mapping through API
