@@ -6,22 +6,53 @@ By João Sequeira
 Mar 2020
 """
 
-from mosca_tools import MoscaTools
-from uniprot_mapping import UniprotMapping
+from uniprot_support import UniprotSupport
 from progressbar import ProgressBar
 from io import StringIO
 import pandas as pd
 import numpy as np
-import argparse, time, os, shutil, glob, urllib.request, urllib.parse, urllib.error
+import argparse, subprocess, time, os, sys, urllib.request, urllib.parse, urllib.error
 
-mtools = MoscaTools()
 upmap = UniprotSupport()
 
-class Annotater:
+class UPIMAPI:
     
     def __init__ (self, **kwargs):
         self.__dict__ = kwargs
         
+    '''
+    Input:
+        filename: str - FASTA filename
+    Output:
+        dict {header : sequence}
+    '''
+    def parse_fasta(self, filename):
+        lines = [line.rstrip('\n') for line in open(filename)]
+        i = 0
+        sequences = dict()
+        while i < len(lines):
+            if lines[i].startswith('>'):
+                name = lines[i][1:]
+                sequences[name] = ''
+                i += 1
+                while i < len(lines) and not lines[i].startswith('>'):
+                    sequences[name] += lines[i]
+                    i += 1
+        return sequences
+    
+    '''
+    Input:
+        filename: str - BLAST filename
+    Output:
+        pandas.DataFrame
+    '''
+    def parse_blast(self, blast):
+        result = pd.read_csv(blast, sep='\t', header = None)
+        result.columns = ['qseqid', 'sseqid', 'pident', 'length', 'mismatch', 
+                          'gapopen', 'qstart', 'qend', 'sstart', 'send', 
+                          'evalue', 'bitscore']
+        return result
+    
     '''
     Input:
         ids: list of UniProt IDs to query
@@ -44,7 +75,7 @@ class Annotater:
             'columns':upmap.string4mapping(columns = columns, databases = databases)
         }
         
-        if database_destination != '' or original_database == 'ACC+ID':
+        if database_destination == '' or original_database == 'ACC+ID':
             params['to'] = 'ACC'
         
         data = urllib.parse.urlencode(params).encode("utf-8")
@@ -101,10 +132,10 @@ class Annotater:
     def recursive_uniprot_fasta(self, output, fasta = None, blast = None, 
                                 entries = None, max_iter = 5):
         if fasta is not None:
-            fasta = mtools.parse_fasta(fasta)
+            fasta = self.parse_fasta(fasta)
             all_ids = list(set(fasta.keys()))
         elif blast is not None:
-            blast = mtools.parse_blast(blast)
+            blast = self.parse_blast(blast)
             all_ids = list(set([ide.split('|')[1] if ide != '*' else ide 
                                 for ide in blast.sseqid]))
         elif entries is not None:
@@ -113,7 +144,7 @@ class Annotater:
             print('Must specify either fasta or blast!')
             return
         i = 0
-        ids_done = ([ide.split('|')[1] for ide in mtools.parse_fasta(output).keys()]
+        ids_done = ([ide.split('|')[1] for ide in self.parse_fasta(output).keys()]
                     if os.path.isfile(output) else list())
         while len(ids_done) < len(all_ids) and i < max_iter:
             print('Checking which IDs are missing information.')
@@ -125,7 +156,7 @@ class Annotater:
                                                        output_format = 'fasta')
             with open(output, 'a') as file:
                 file.write(uniprotinfo)
-            ids_done = [ide.split('|')[1] for ide in mtools.parse_fasta(output).keys()]
+            ids_done = [ide.split('|')[1] for ide in self.parse_fasta(output).keys()]
             i += 1
         if len(ids_done) == len(all_ids):
             print('Results for all IDs are available at ' + output)
@@ -138,16 +169,17 @@ class Annotater:
                   ' at ' + ids_unmapped_output + ' and information obtained is available' +
                   ' at ' + output)
         
-    def recursive_uniprot_information(self, blast, output, max_iter = 5,
+    def recursive_uniprot_information(self, ids, output, max_iter = 5,
                                       columns = None, databases = None):
         if os.path.isfile(output):
+            print(output + ' was found. Will perform mapping for the remaining IDs.')
             result = pd.read_csv(output, sep = '\t', low_memory=False).drop_duplicates()
             ids_done = list(set(result['Entry']))
         else:
-            print(output + ' not found.')
-            ids_done = list()
+            print(output + ' not found. Will perform mapping for all IDs.')
             result = pd.DataFrame()
-        all_ids = set([ide.split('|')[1] for ide in mtools.parse_blast(blast)['sseqid'] if ide != '*'])
+            ids_done = list()
+        all_ids = set([ide.split('|')[1] for ide in ids if ide != '*'])
         tries = 0
         ids_unmapped_output = '/'.join(output.split('/')[:-1]) + '/ids_unmapped.txt'
         ids_missing = list(set(all_ids) - set(ids_done))
@@ -157,16 +189,18 @@ class Annotater:
         print('IDs missing: ' + str(len(ids_missing)))
         
         while len(ids_missing) > 0 and tries < max_iter:
-            print('Information already gathered for ' + str(len(ids_done)) + 
-                  ' ids. Still missing for ' + str(len(ids_missing)) + '.')
+            print('Information already gathered for {} ids. Still missing for {}.'.format(
+                    str(len(ids_done)), str(len(ids_missing))))
             uniprotinfo = self.get_uniprot_information(ids_missing,
                                 columns = columns, databases = databases)
             ids_done += list(set(uniprotinfo['Entry']))
+            '''
             try:                                                                # Will keep this as it has worked before, even not being supposed to. SBF1
                 result = result[uniprotinfo.columns]
             except:
                 print('SBF1: please contact the author by email to jsequeira@ceb.uminho.pt or raise a new issue at github.com/iquasere/MOSCA/issues')
                 result.to_csv('uniprot_info.tsv',sep='\t',index=False)
+            '''
             result = pd.concat([result, uniprotinfo])
             ids_missing = list(set(all_ids) - set(ids_done))
             if len(ids_missing) > 0:
@@ -234,7 +268,7 @@ class Annotater:
         This function was very cool
     '''
     def uniprotinfo_to_excel(self, uniprotinfo, blast, output):
-        blast = mtools.parse_blast(blast)
+        blast = self.parse_blast(blast)
         uniprotdf = pd.read_csv(uniprotinfo, sep = '\t', index_col = 0).drop_duplicates()
         pbar = ProgressBar()
         blast['Coverage'] = [float(ide.split('_')[5]) for ide in pbar(blast.qseqid)]
@@ -275,9 +309,25 @@ class Annotater:
     def create_krona_plot(self, tsv, output = None):
         if output is None:
             output = tsv.replace('.tsv','.html')
-        mtools.run_command('perl Krona/KronaTools/scripts/ImportText.pl {} -o {}'.format(tsv, output))
+        bashCommand = 'perl Krona/KronaTools/scripts/ImportText.pl {} -o {}'.format(tsv, output)
+        subprocess.run(bashCommand.split(), stdout=sys.stdout, check = True)
+        
+    '''
+    Input:
+    Output:
+    '''
+    def get_ids(self, inpute, blast = False, entry_name = False):
+        if blast:
+            ids = upimapi.parse_blast(inpute)['sseqid']
+        else:
+            ids = open(inpute).read().split('\n')
+        if entry_name:
+            ids = [ide.split('|')[1] for ide in ids]
+        return ids
         
 if __name__ == '__main__':
+    
+    upimapi = UPIMAPI()
     
     parser = argparse.ArgumentParser(description = "UniProt Id Mapping through API",
                              epilog = """A tool for retrieving information from UniProt.""")
@@ -286,14 +336,26 @@ if __name__ == '__main__':
                         or a BLAST TSV file - if so, specify with the --blast parameter""")
     parser.add_argument("-o", "--output", help = "filename of output",
                         default = "./uniprotinfo.xlsx")
-    parser.add_argument("--tsv", help = "Will produce output in TSV format")
+    parser.add_argument("--tsv", help = "Will produce output in TSV format",
+                        action = "store_true", default = False)
     parser.add_argument("-anncols", "--annotation-columns", default = None,
                         help = "List of UniProt columns to obtain information from")
     parser.add_argument("-anndbs", "--annotation-databases", default = None,
                         help = "List of databases to cross-check with UniProt information")
-    parser.add_argument("--blast", help = "If input file is in BLAST TSV format")
-    parser.add_argument("--entry_name", help = "If IDs are in 'Entry name' format: tr|XXX|XXX")
+    parser.add_argument("--blast", help = "If input file is in BLAST TSV format",
+                        action = "store_true", default = False)
+    parser.add_argument("--entry_name", help = "If IDs are in 'Entry name' format: tr|XXX|XXX",
+                        action = "store_true", default = False)
+    parser.add_argument("--fasta", help = "Output will be generated in FASTA format",
+                        action = "store_true", default = False)
     
     args = parser.parse_args()
     
+    # Get the IDs
+    ids = UPIMAPI.get_ids(args.input, blast = args.blast, entry_name = args.entry_name)
+    ids = [ide for ide in ids if ide != '*']                                    # removes the non identified that happen if input is blast
+    
+    # Get UniProt information
+    UPIMAPI.recursive_uniprot_information(ids, args.output, columns = args.anncols,
+                                          databases = args.anndbs)
     
