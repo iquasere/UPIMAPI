@@ -179,12 +179,11 @@ class UPIMAPI:
             print(output + ' not found. Will perform mapping for all IDs.')
             result = pd.DataFrame()
             ids_done = list()
-        all_ids = set([ide.split('|')[1] for ide in ids if ide != '*'])
         tries = 0
         ids_unmapped_output = '/'.join(output.split('/')[:-1]) + '/ids_unmapped.txt'
-        ids_missing = list(set(all_ids) - set(ids_done))
+        ids_missing = list(set(ids) - set(ids_done))
         
-        print('IDs present in blast file: ' + str(len(all_ids)))
+        print('IDs present in blast file: ' + str(len(ids)))
         print('IDs present in uniprotinfo file: ' + str(len(ids_done)))
         print('IDs missing: ' + str(len(ids_missing)))
         
@@ -194,15 +193,8 @@ class UPIMAPI:
             uniprotinfo = self.get_uniprot_information(ids_missing,
                                 columns = columns, databases = databases)
             ids_done += list(set(uniprotinfo['Entry']))
-            '''
-            try:                                                                # Will keep this as it has worked before, even not being supposed to. SBF1
-                result = result[uniprotinfo.columns]
-            except:
-                print('SBF1: please contact the author by email to jsequeira@ceb.uminho.pt or raise a new issue at github.com/iquasere/MOSCA/issues')
-                result.to_csv('uniprot_info.tsv',sep='\t',index=False)
-            '''
             result = pd.concat([result, uniprotinfo])
-            ids_missing = list(set(all_ids) - set(ids_done))
+            ids_missing = list(set(ids) - set(ids_done))
             if len(ids_missing) > 0:
                 print('Failed to retrieve information for some IDs. Retrying request.')
                 tries += 1
@@ -327,16 +319,14 @@ class UPIMAPI:
         
 if __name__ == '__main__':
     
-    upimapi = UPIMAPI()
-    
     parser = argparse.ArgumentParser(description = "UniProt Id Mapping through API",
                              epilog = """A tool for retrieving information from UniProt.""")
     parser.add_argument("-i", "--input", required = True,
                         help = """Input filename - can be a list of IDs (one per line)
                         or a BLAST TSV file - if so, specify with the --blast parameter""")
     parser.add_argument("-o", "--output", help = "filename of output",
-                        default = "./uniprotinfo.xlsx")
-    parser.add_argument("--tsv", help = "Will produce output in TSV format",
+                        default = "./uniprotinfo.tsv")
+    parser.add_argument("--excel", help = "Will produce output in EXCEL format (default is TSV)",
                         action = "store_true", default = False)
     parser.add_argument("-anncols", "--annotation-columns", default = None,
                         help = "List of UniProt columns to obtain information from")
@@ -350,12 +340,14 @@ if __name__ == '__main__':
                         action = "store_true", default = False)
     
     args = parser.parse_args()
+    upimapi = UPIMAPI()    
     
     # Get the IDs
-    ids = UPIMAPI.get_ids(args.input, blast = args.blast, entry_name = args.entry_name)
+    ids = upimapi.get_ids(args.input, blast = args.blast, entry_name = args.entry_name)
+    print(ids)
     ids = [ide for ide in ids if ide != '*']                                    # removes the non identified that happen if input is blast
     
     # Get UniProt information
-    UPIMAPI.recursive_uniprot_information(ids, args.output, columns = args.anncols,
-                                          databases = args.anndbs)
+    upimapi.recursive_uniprot_information(ids, args.output, columns = args.annotation_columns,
+                                          databases = args.annotation_databases)
     
