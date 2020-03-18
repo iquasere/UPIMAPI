@@ -9,8 +9,7 @@ Mar 2020
 from uniprot_support import UniprotSupport
 from progressbar import ProgressBar
 from io import StringIO
-import pandas as pd
-import numpy as np
+import pandas as pd, numpy as np
 import argparse, subprocess, time, os, sys, urllib.request, urllib.parse, urllib.error
 
 upmap = UniprotSupport()
