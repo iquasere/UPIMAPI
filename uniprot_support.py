@@ -12,6 +12,25 @@ class UniprotSupport:
     def __init__ (self, **kwargs):
         self.__dict__ = kwargs
         
+        self.default_columns = ['Entry', 'Entry name', 'Gene names', 'Protein names',    # I'm keeping "Entry name" because of IDs like ALBU_HUMAN, which work fine but the user may be confused by not appearing in the results: it appears on "Entry name"
+            'EC number', 'Function[CC]', 'Pathway', 'Keywords', 'Protein existence', 
+            'Gene ontology (GO)', 'Protein families', 'Taxonomic lineage (SUPERKINGDOM)', 
+            'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)', 
+            'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 
+            'Taxonomic lineage (GENUS)', 'Taxonomic lineage (SPECIES)']
+        
+        self.default_databases = ['BioCyc Collection of Pathway/Genome Databases',
+             'BRENDA Comprehensive Enzyme Information System',
+             'Conserved Domains Database', 
+             'evolutionary genealogy of genes: Non-supervised Orthologous Groups',
+             'Ensembl eukaryotic genome annotation project',
+             'Integrated resource of protein families, domains and functional sites',
+             'KEGG: Kyoto Encyclopedia of Genes and Genomes',
+             'KEGG Orthology (KO)', 'Pfam protein domain database',
+             'Reactome - a knowledgebase of biological pathways and processes',
+             'NCBI Reference Sequences',
+             'UniPathway: a resource for the exploration and annotation of metabolic pathways']
+        
         self.uniprot_columns = {                                                # From https://www.uniprot.org/help/uniprotkb_column_names, as of 23rd of May, 2019
             # Names & Taxonomy
             'Entry':'id',
@@ -378,26 +397,10 @@ class UniprotSupport:
                     'Xenopus laevis and tropicalis biology and genomics resource':'Xenbase',
                     'Zebrafish Information Network genome database':'ZFIN'}
         
-    def string4mapping(self, columns = None, databases = None):
-        if columns is None and databases is None:                           # Sets to defaults, it's dirty but best way I found
-            columns = ['Entry', 'Gene names', 'Protein names',
-            'EC number', 'Function[CC]', 'Pathway', 'Keywords', 'Protein existence', 
-            'Gene ontology (GO)', 'Protein families', 'Taxonomic lineage (SUPERKINGDOM)', 
-            'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)', 
-            'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 
-            'Taxonomic lineage (GENUS)', 'Taxonomic lineage (SPECIES)']
-            
-            databases = ['BioCyc Collection of Pathway/Genome Databases',
-             'BRENDA Comprehensive Enzyme Information System',
-             'Conserved Domains Database', 
-             'evolutionary genealogy of genes: Non-supervised Orthologous Groups',
-             'Ensembl eukaryotic genome annotation project',
-             'Integrated resource of protein families, domains and functional sites',
-             'KEGG: Kyoto Encyclopedia of Genes and Genomes',
-             'KEGG Orthology (KO)', 'Pfam protein domain database',
-             'Reactome - a knowledgebase of biological pathways and processes',
-             'NCBI Reference Sequences',
-             'UniPathway: a resource for the exploration and annotation of metabolic pathways']
+    def string4mapping(self, columns = list(), databases = list()):
+        if len(columns + databases) == 0:                                       # Sets to defaults, it's dirty but best way I found
+            columns = self.default_columns
+            databases = self.default_databases
 
         result = ','.join([self.uniprot_columns[column] for column in columns])
         if len(databases) > 0:
