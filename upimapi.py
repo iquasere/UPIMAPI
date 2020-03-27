@@ -89,8 +89,8 @@ class UPIMAPI:
         database_destination: database to where to map (so far, only works with 'ACC'
         chunk: INT, number of IDs to send per request
         sleep: INT, number of seconds to wait between requests
-        columns: names of UniProt columns to get info on
-        databases: names of databases to cross-reference with
+        columns: list - names of UniProt columns to get info on
+        databases: list - names of databases to cross-reference with
     Output:
         pd.DataFrame will be returned with the information about the IDs queried.
     '''
@@ -243,9 +243,9 @@ class UPIMAPI:
                             default = "./uniprotinfo.tsv")
         parser.add_argument("--excel", help = "Will produce output in EXCEL format (default is TSV)",
                             action = "store_true", default = False)
-        parser.add_argument("-anncols", "--annotation-columns", default = list(),
+        parser.add_argument("-anncols", "--annotation-columns", default = '',
                             help = "List of UniProt columns to obtain information from")
-        parser.add_argument("-anndbs", "--annotation-databases", default = list(),
+        parser.add_argument("-anndbs", "--annotation-databases", default = '',
                             help = "List of databases to cross-check with UniProt information")
         parser.add_argument("--blast", help = "If input file is in BLAST TSV format",
                             action = "store_true", default = False)
@@ -263,8 +263,9 @@ class UPIMAPI:
         
         # Get UniProt information
         if not args.fasta:
-            self.recursive_uniprot_information(ids, args.output, columns = args.annotation_columns,
-                                              databases = args.annotation_databases, excel = args.excel)
+            self.recursive_uniprot_information(ids, args.output, columns = args.annotation_columns.split(','),
+                                              databases = args.annotation_databases.split(','), 
+                                              excel = args.excel)
         else:
             self.recursive_uniprot_fasta(ids, args.output)
         
