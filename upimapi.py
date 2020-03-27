@@ -145,7 +145,7 @@ class UPIMAPI:
             ids_done = list()
         tries = 0
         ids_unmapped_output = '/'.join(output.split('/')[:-1]) + '/ids_unmapped.txt'
-        ids_missing = list(set(ids) - set(ids_done))
+        ids_missing = list(set(all_ids) - set(ids_done))
         
         tries = 0
         ids_done = ([ide.split('|')[1] for ide in self.parse_fasta(output).keys()]
@@ -226,46 +226,48 @@ class UPIMAPI:
     '''
     def get_ids(self, inpute, blast = False, entry_name = False):
         if blast:
-            ids = upimapi.parse_blast(inpute)['sseqid']
+            ids = self.parse_blast(inpute)['sseqid']
         else:
             ids = open(inpute).read().split('\n')
         if entry_name:
             ids = [ide.split('|')[1] for ide in ids]
         return ids
+    
+    def upimapi(self):
+        parser = argparse.ArgumentParser(description = "UniProt Id Mapping through API",
+                             epilog = """A tool for retrieving information from UniProt.""")
+        parser.add_argument("-i", "--input", required = True,
+                            help = """Input filename - can be a list of IDs (one per line)
+                            or a BLAST TSV file - if so, specify with the --blast parameter""")
+        parser.add_argument("-o", "--output", help = "filename of output",
+                            default = "./uniprotinfo.tsv")
+        parser.add_argument("--excel", help = "Will produce output in EXCEL format (default is TSV)",
+                            action = "store_true", default = False)
+        parser.add_argument("-anncols", "--annotation-columns", default = list(),
+                            help = "List of UniProt columns to obtain information from")
+        parser.add_argument("-anndbs", "--annotation-databases", default = list(),
+                            help = "List of databases to cross-check with UniProt information")
+        parser.add_argument("--blast", help = "If input file is in BLAST TSV format",
+                            action = "store_true", default = False)
+        parser.add_argument("--entry_name", help = "If IDs are in 'Entry name' format: tr|XXX|XXX",
+                            action = "store_true", default = False)
+        parser.add_argument("--fasta", help = "Output will be generated in FASTA format",
+                            action = "store_true", default = False)
+        
+        args = parser.parse_args()
+        
+        # Get the IDs
+        ids = self.get_ids(args.input, blast = args.blast, entry_name = args.entry_name)
+        
+        ids = [ide for ide in ids if ide != '*']                                    # removes the non identified that happen if input is blast
+        
+        # Get UniProt information
+        if not args.fasta:
+            self.recursive_uniprot_information(ids, args.output, columns = args.annotation_columns,
+                                              databases = args.annotation_databases, excel = args.excel)
+        else:
+            self.recursive_uniprot_fasta(ids, args.output)
         
 if __name__ == '__main__':
     
-    parser = argparse.ArgumentParser(description = "UniProt Id Mapping through API",
-                             epilog = """A tool for retrieving information from UniProt.""")
-    parser.add_argument("-i", "--input", required = True,
-                        help = """Input filename - can be a list of IDs (one per line)
-                        or a BLAST TSV file - if so, specify with the --blast parameter""")
-    parser.add_argument("-o", "--output", help = "filename of output",
-                        default = "./uniprotinfo.tsv")
-    parser.add_argument("--excel", help = "Will produce output in EXCEL format (default is TSV)",
-                        action = "store_true", default = False)
-    parser.add_argument("-anncols", "--annotation-columns", default = list(),
-                        help = "List of UniProt columns to obtain information from")
-    parser.add_argument("-anndbs", "--annotation-databases", default = list(),
-                        help = "List of databases to cross-check with UniProt information")
-    parser.add_argument("--blast", help = "If input file is in BLAST TSV format",
-                        action = "store_true", default = False)
-    parser.add_argument("--entry_name", help = "If IDs are in 'Entry name' format: tr|XXX|XXX",
-                        action = "store_true", default = False)
-    parser.add_argument("--fasta", help = "Output will be generated in FASTA format",
-                        action = "store_true", default = False)
-    
-    args = parser.parse_args()
-    upimapi = UPIMAPI()    
-    
-    # Get the IDs
-    ids = upimapi.get_ids(args.input, blast = args.blast, entry_name = args.entry_name)
-    
-    ids = [ide for ide in ids if ide != '*']                                    # removes the non identified that happen if input is blast
-    
-    # Get UniProt information
-    if not args.fasta:
-        upimapi.recursive_uniprot_information(ids, args.output, columns = args.annotation_columns,
-                                          databases = args.annotation_databases, excel = args.excel)
-    else:
-        upimapi.recursive_uniprot_fasta(ids, args.output)
+    UPIMAPI().upimapi()
