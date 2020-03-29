@@ -107,8 +107,9 @@ class UPIMAPI:
                         databases = databases)
             if len(data) > 0:
                 uniprotinfo = pd.read_csv(StringIO(data), sep = '\t')
-                k = (len(uniprotinfo.columns) - (30 if len(columns + databases) == 0
-                     else (len(columns) + len(databases))))                     # Removes the "yourlist:" and "isomap:" columns
+                k = (len(uniprotinfo.columns) - (30 if (len(columns + databases) == 0 
+                    or (columns == [''] and databases == ['']))
+                    else (len(columns) + len(databases))))                      # Removes the "yourlist:" and "isomap:" columns
                 uniprotinfo = uniprotinfo[uniprotinfo.columns.tolist()[:-k]]
                 result = pd.concat([result, uniprotinfo[uniprotinfo.columns.tolist()]])
             time.sleep(sleep)
@@ -197,7 +198,7 @@ class UPIMAPI:
                                 columns = columns, databases = databases)
             if len(uniprotinfo) > 0:
                 ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry name'].tolist()))
-                result = pd.merge(result, uniprotinfo, how = 'outer')
+                result = pd.concat([result, uniprotinfo], ignore_index = True)
             ids_missing = list(set(ids) - set(ids_done))
             
             if len(ids_missing) > 0:
