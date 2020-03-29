@@ -197,7 +197,7 @@ class UPIMAPI:
                                 columns = columns, databases = databases)
             if len(uniprotinfo) > 0:
                 ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry name'].tolist()))
-                result = pd.merge(result, uniprotinfo, how='outer')
+                result = pd.merge(result, uniprotinfo, how = 'outer')
             ids_missing = list(set(ids) - set(ids_done))
             
             if len(ids_missing) > 0:
@@ -224,12 +224,13 @@ class UPIMAPI:
     Input:
     Output:
     '''
-    def get_ids(self, inpute, blast = False, entry_name = False):
+    def get_ids(self, inpute, blast = False, full_id = False):
         if blast:
             ids = self.parse_blast(inpute)['sseqid']
+            ids = [ide for ide in ids if ide != '*']                            # removes the non identified
         else:
             ids = open(inpute).read().split('\n')
-        if entry_name:
+        if full_id:
             ids = [ide.split('|')[1] for ide in ids]
         return ids
     
@@ -249,7 +250,7 @@ class UPIMAPI:
                             help = "List of databases to cross-check with UniProt information")
         parser.add_argument("--blast", help = "If input file is in BLAST TSV format",
                             action = "store_true", default = False)
-        parser.add_argument("--entry_name", help = "If IDs are in 'Entry name' format: tr|XXX|XXX",
+        parser.add_argument("--full-id", help = "If IDs are in 'full' format: tr|XXX|XXX",
                             action = "store_true", default = False)
         parser.add_argument("--fasta", help = "Output will be generated in FASTA format",
                             action = "store_true", default = False)
@@ -257,9 +258,7 @@ class UPIMAPI:
         args = parser.parse_args()
         
         # Get the IDs
-        ids = self.get_ids(args.input, blast = args.blast, entry_name = args.entry_name)
-        
-        ids = [ide for ide in ids if ide != '*']                                    # removes the non identified that happen if input is blast
+        ids = self.get_ids(args.input, blast = args.blast, full_id = args.full_id)
         
         # Get UniProt information
         if not args.fasta:
