@@ -398,7 +398,7 @@ class UniprotSupport:
                     'Zebrafish Information Network genome database':'ZFIN'}
         
     def string4mapping(self, columns = list(), databases = list()):
-        if len(columns + databases) == 0 or (columns == [''] and databases == ['']):    # Sets to defaults, it's dirty but best way I found
+        if len(columns + databases) == 0:                                       # Sets to defaults, it's dirty but best way I found
             columns = self.default_columns
             databases = self.default_databases
 

@@ -263,9 +263,11 @@ class UPIMAPI:
         
         # Get UniProt information
         if not args.fasta:
-            self.recursive_uniprot_information(ids, args.output, columns = args.annotation_columns.split(','),
-                                              databases = args.annotation_databases.split(','), 
-                                              excel = args.excel)
+            columns = args.annotation_columns.split(',') if args.annotation_columns != '' else list()
+            databases = args.annotation_databases.split(',') if args.annotation_databases != '' else list()
+            
+            self.recursive_uniprot_information(ids, args.output, columns = columns,
+                                              databases = databases, excel = args.excel)
         else:
             self.recursive_uniprot_fasta(ids, args.output)
         
