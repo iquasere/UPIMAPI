@@ -100,7 +100,7 @@ class UPIMAPI:
         pbar = ProgressBar()
         print('Retrieving UniProt information from ' + str(len(ids)) + ' IDs.')
         result = pd.DataFrame()
-        for i in pbar(range(0, len(ids), int(step))):
+        for i in pbar(range(0, len(ids), step)):
             j = i + step if i + step < len(ids) else len(ids)
             try:
                 data = self.uniprot_request(ids[i:j], original_database, 
@@ -128,11 +128,11 @@ class UPIMAPI:
         str object containing the fasta sequences and headers
         of the proteis belonging to the IDs queried will be returned
     '''
-    def get_uniprot_fasta(self, ids, step = '1000', sleep = 30):
+    def get_uniprot_fasta(self, ids, step = 1000, sleep = 30):
         pbar = ProgressBar()
         print('Building FASTA from ' + str(len(ids)) + ' IDs.')
         result = str()
-        for i in pbar(range(0, len(ids), int(step))):
+        for i in pbar(range(0, len(ids), step)):
             j = i + step if i + step < len(ids) else len(ids)
             data = self.uniprot_request(ids[i:j], original_database = 'ACC+ID', 
                         database_destination = '', output_format = 'fasta')
@@ -141,7 +141,7 @@ class UPIMAPI:
             time.sleep(sleep)
         return result
     
-    def recursive_uniprot_fasta(self, all_ids, output, max_iter = 5, step = '1000'):
+    def recursive_uniprot_fasta(self, all_ids, output, max_iter = 5, step = 1000):
         if os.path.isfile(output):
             print(output + ' was found. Will perform mapping for the remaining IDs.')
             ids_done = self.parse_fasta(output).keys()
@@ -177,7 +177,7 @@ class UPIMAPI:
                     str(len(ids_missing)), ids_unmapped_output, output))
         
     def recursive_uniprot_information(self, ids, output, max_iter = 5, excel = False,
-                                      columns = list(), databases = list(), step = '1000'):
+                                      columns = list(), databases = list(), step = 1000):
         if os.path.isfile(output):
             print(output + ' was found. Will perform mapping for the remaining IDs.')
             result = pd.read_csv(output, sep = '\t', low_memory=False).drop_duplicates()
@@ -274,9 +274,9 @@ class UPIMAPI:
             
             self.recursive_uniprot_information(ids, args.output, columns = columns,
                                               databases = databases, excel = args.excel,
-                                              step = args.step)
+                                              step = int(args.step))
         else:
-            self.recursive_uniprot_fasta(ids, args.output, step = args.step)
+            self.recursive_uniprot_fasta(ids, args.output, step = int(args.step))
         
 if __name__ == '__main__':
     
