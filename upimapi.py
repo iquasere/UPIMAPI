@@ -100,7 +100,7 @@ class UPIMAPI:
         pbar = ProgressBar()
         print('Retrieving UniProt information from ' + str(len(ids)) + ' IDs.')
         result = pd.DataFrame()
-        for i in pbar(range(0, len(ids), step)):
+        for i in pbar(range(0, len(ids), int(step))):
             j = i + step if i + step < len(ids) else len(ids)
             try:
                 data = self.uniprot_request(ids[i:j], original_database, 
@@ -128,12 +128,12 @@ class UPIMAPI:
         str object containing the fasta sequences and headers
         of the proteis belonging to the IDs queried will be returned
     '''
-    def get_uniprot_fasta(self, ids, chunk = 1000, sleep = 30):
+    def get_uniprot_fasta(self, ids, step = '1000', sleep = 30):
         pbar = ProgressBar()
         print('Building FASTA from ' + str(len(ids)) + ' IDs.')
         result = str()
-        for i in pbar(range(0, len(ids), chunk)):
-            j = i + chunk if i + chunk < len(ids) else len(ids)
+        for i in pbar(range(0, len(ids), int(step))):
+            j = i + step if i + step < len(ids) else len(ids)
             data = self.uniprot_request(ids[i:j], original_database = 'ACC+ID', 
                         database_destination = '', output_format = 'fasta')
             if len(data) > 0:
