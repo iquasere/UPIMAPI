@@ -198,6 +198,8 @@ class UPIMAPI:
             print('Information already gathered for {} ids. Still missing for {}.'.format(
                     str(len(ids_done)), str(len(ids_missing))))
             last_ids_missing = ids_missing
+            uniprotinfo = self.get_uniprot_information(ids_missing, step = step,
+                                columns = columns, databases = databases)
             if len(uniprotinfo) > 0:
                 ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry name'].tolist()))
                 result = pd.concat([result, uniprotinfo], ignore_index = True)
