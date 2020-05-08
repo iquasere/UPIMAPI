@@ -30,7 +30,7 @@ python upimapi.py -i aligned.blast --blast -o uniprotinfo.tsv
 ```
 usage: upimapi.py [-h] -i INPUT [-o OUTPUT] [--excel]
                   [-anncols ANNOTATION_COLUMNS] [-anndbs ANNOTATION_DATABASES]
-                  [--blast] [--entry_name] [--fasta]
+                  [--blast] [--full-id] [--fasta] [--step STEP]
 
 UniProt Id Mapping through API
 
@@ -49,8 +49,10 @@ optional arguments:
                         List of databases to cross-check with UniProt
                         information
   --blast               If input file is in BLAST TSV format
-  --entry_name          If IDs are in 'Entry name' format: tr|XXX|XXX
+  --full-id             If IDs are in 'full' format: tr|XXX|XXX
   --fasta               Output will be generated in FASTA format
+  --step STEP           How many IDs to submit per request to the API (default
+                        is 1000)
 
 A tool for retrieving information from UniProt.
 ```
