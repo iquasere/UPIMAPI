@@ -261,7 +261,7 @@ class UPIMAPI:
                             action = "store_true", default = False)
         parser.add_argument("--step", help = "How many IDs to submit per request to the API (default is 1000)",
                             default = '1000')
-        parser.add_argument('-v', '--version', action='version', version='UPI ' + __version__)
+        parser.add_argument('-v', '--version', action='version', version='UPIMAPI ' + __version__)
         
         requiredNamed = parser.add_argument_group('required named arguments')
         requiredNamed.add_argument("-i", "--input", required = True,
