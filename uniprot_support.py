@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 A support class to store columns and databases of UniProt
 

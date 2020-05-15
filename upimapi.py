@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 UPIMAPI - UniProt Id Mapping through API
 
