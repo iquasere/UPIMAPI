@@ -13,6 +13,8 @@ from io import StringIO
 import pandas as pd
 import argparse, time, os, urllib.request, urllib.parse, urllib.error
 
+__version__ = '1.0.2'
+
 upmap = UniprotSupport()
 
 class UPIMAPI:
@@ -243,9 +245,6 @@ class UPIMAPI:
     def upimapi(self):
         parser = argparse.ArgumentParser(description = "UniProt Id Mapping through API",
                              epilog = """A tool for retrieving information from UniProt.""")
-        parser.add_argument("-i", "--input", required = True,
-                            help = """Input filename - can be a list of IDs (one per line)
-                            or a BLAST TSV file - if so, specify with the --blast parameter""")
         parser.add_argument("-o", "--output", help = "filename of output",
                             default = "./uniprotinfo.tsv")
         parser.add_argument("--excel", help = "Will produce output in EXCEL format (default is TSV)",
@@ -262,6 +261,12 @@ class UPIMAPI:
                             action = "store_true", default = False)
         parser.add_argument("--step", help = "How many IDs to submit per request to the API (default is 1000)",
                             default = '1000')
+        parser.add_argument('-v', '--version', action='version', version='reCOGnizer ' + __version__)
+        
+        requiredNamed = parser.add_argument_group('required named arguments')
+        requiredNamed.add_argument("-i", "--input", required = True,
+                    help = """Input filename - can be a list of IDs (one per line)
+                    or a BLAST TSV file - if so, specify with the --blast parameter""")
         
         args = parser.parse_args()
         
