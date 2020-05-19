@@ -28,9 +28,9 @@ python upimapi.py -i aligned.blast --blast -o uniprotinfo.tsv
 ## Additional parameters
 
 ```
-usage: upimapi.py [-h] -i INPUT [-o OUTPUT] [--excel]
+usage: upimapi.py [-h] [-i INPUT] [-o OUTPUT] [--excel]
                   [-anncols ANNOTATION_COLUMNS] [-anndbs ANNOTATION_DATABASES]
-                  [--blast] [--full-id] [--fasta] [--step STEP]
+                  [--blast] [--full-id] [--fasta] [--step STEP] [-v]
 
 UniProt Id Mapping through API
 
@@ -39,7 +39,8 @@ optional arguments:
   -i INPUT, --input INPUT
                         Input filename - can be a list of IDs (one per line)
                         or a BLAST TSV file - if so, specify with the --blast
-                        parameter
+                        parameter. If no file is given as input, will read
+                        from command line input
   -o OUTPUT, --output OUTPUT
                         filename of output
   --excel               Will produce output in EXCEL format (default is TSV)
@@ -53,6 +54,16 @@ optional arguments:
   --fasta               Output will be generated in FASTA format
   --step STEP           How many IDs to submit per request to the API (default
                         is 1000)
+  -v, --version         show program's version number and exit
 
 A tool for retrieving information from UniProt.
 ```
+
+## UPIMAPI is available through Bioconda!
+
+To install UPIMAPI through bioconda and run it, simply pass these commands:
+```
+conda install -c bioconda upimapi
+upimapi.py [arguments]
+```
+**NOTE:** there is no need to explicitly declare python use when installing with Bioconda!
