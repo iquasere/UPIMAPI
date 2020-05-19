@@ -183,7 +183,8 @@ class UPIMAPI:
                                       columns = list(), databases = list(), step = 1000):
         if os.path.isfile(output):
             print(output + ' was found. Will perform mapping for the remaining IDs.')
-            result = pd.read_csv(output, sep = '\t', low_memory=False).drop_duplicates()
+            result = (pd.read_csv(output, sep = '\t', low_memory=False) if not
+                      excel else pd.read_excel(output)).drop_duplicates()
             ids_done = list(set(result['Entry'].tolist() + result['Entry name'].tolist()))
         else:
             print(output + ' not found. Will perform mapping for all IDs.')
@@ -214,11 +215,10 @@ class UPIMAPI:
                 else:
                     print('Failed to retrieve information for some IDs. Retrying request.')
                     tries += 1
-        
+                    
         if not excel:
             result.to_csv(output, sep = '\t', index = False)
         else:
-            output += '.xlsx'
             result.to_excel(output, index = False)
         
         if len(ids_missing) == 0:
@@ -232,19 +232,25 @@ class UPIMAPI:
     Input:
     Output:
     '''
-    def get_ids(self, inpute, blast = False, full_id = False):
-        if blast:
+    def get_ids(self, inpute, input_type = 'blast', full_id = False):
+        if input_type == 'blast':
             ids = self.parse_blast(inpute)['sseqid']
             ids = [ide for ide in ids if ide != '*']                            # removes the non identified
-        else:
+        elif input_type == 'tsv':
             ids = open(inpute).read().split('\n')
+        else:
+            ids = inpute.split(',')
         if full_id:
-            ids = [ide.split('|')[1] for ide in ids]
+            return [ide.split('|')[1] for ide in ids]
         return ids
     
     def upimapi(self):
         parser = argparse.ArgumentParser(description = "UniProt Id Mapping through API",
                              epilog = """A tool for retrieving information from UniProt.""")
+        parser.add_argument("-i", "--input", help = """Input filename - can be a 
+                            list of IDs (one per line) or a BLAST TSV file - if so, 
+                            specify with the --blast parameter. If no file is given
+                            as input, will read from command line input""")
         parser.add_argument("-o", "--output", help = "filename of output",
                             default = "./uniprotinfo.tsv")
         parser.add_argument("--excel", help = "Will produce output in EXCEL format (default is TSV)",
@@ -263,24 +269,28 @@ class UPIMAPI:
                             default = '1000')
         parser.add_argument('-v', '--version', action='version', version='UPIMAPI ' + __version__)
         
-        requiredNamed = parser.add_argument_group('required named arguments')
-        requiredNamed.add_argument("-i", "--input", required = True,
-                    help = """Input filename - can be a list of IDs (one per line)
-                    or a BLAST TSV file - if so, specify with the --blast parameter""")
-        
         args = parser.parse_args()
         
+        # Get IDs from STDIN and set input type
+        if args.input is None:
+            args.input = input('IDs to perform mapping on (comma separated values):')
+            input_type = 'stdin'
+        elif args.blast:
+            input_type = 'blast'
+        else:
+            input_type = 'tsv'
+        
         # Get the IDs
-        ids = self.get_ids(args.input, blast = args.blast, full_id = args.full_id)
+        ids = self.get_ids(args.input, input_type = input_type, full_id = args.full_id)
         
         # Get UniProt information
         if not args.fasta:
             columns = args.annotation_columns.split(',') if args.annotation_columns != '' else list()
             databases = args.annotation_databases.split(',') if args.annotation_databases != '' else list()
             
-            self.recursive_uniprot_information(ids, args.output, columns = columns,
-                                              databases = databases, excel = args.excel,
-                                              step = int(args.step))
+            self.recursive_uniprot_information(ids, args.output + ('.xlsx' if
+                args.excel else '.tsv'), columns = columns, databases = databases, 
+                excel = args.excel, step = int(args.step))
         else:
             self.recursive_uniprot_fasta(ids, args.output, step = int(args.step))
         
