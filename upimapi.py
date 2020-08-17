@@ -153,7 +153,7 @@ class UPIMAPI:
             ids_done = list()
         tries = 0
         ids_unmapped_output = '{}{}ids_unmapped.txt'.format('/'.join(output.split('/')[:-1]),
-                            '/' if '/' in output else ''
+                            '/' if '/' in output else '')
                                                            
         ids_missing = list(set(all_ids) - set(ids_done))
         
@@ -194,7 +194,7 @@ class UPIMAPI:
             ids_done = list()
         tries = 0
         ids_unmapped_output = '{}{}ids_unmapped.txt'.format('/'.join(output.split('/')[:-1]),
-                            '/' if '/' in output else ''
+                            '/' if '/' in output else '')
         ids_missing = list(set(ids) - set(ids_done))
         last_ids_missing = None
         
