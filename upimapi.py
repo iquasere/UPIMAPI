@@ -13,7 +13,7 @@ from io import StringIO
 import pandas as pd
 import argparse, time, os, urllib.request, urllib.parse, urllib.error
 
-__version__ = '1.0.3'
+__version__ = '1.0.4'
 
 upmap = UniprotSupport()
 
