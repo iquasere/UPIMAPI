@@ -183,13 +183,18 @@ class UPIMAPI:
         
     def recursive_uniprot_information(self, ids, output, max_iter = 5, excel = False,
                                       columns = list(), databases = list(), step = 1000):
-        if os.path.isfile(output):
-            print(output + ' was found. Will perform mapping for the remaining IDs.')
-            result = (pd.read_csv(output, sep = '\t', low_memory=False) if not
+        if os.path.isfile(output) and not os.stat("file").st_size == 0:
+                try:
+                    print(output + ' was found. Will perform mapping for the remaining IDs.')
+                    result = (pd.read_csv(output, sep = '\t', low_memory=False) if not
                       excel else pd.read_excel(output)).drop_duplicates()
-            ids_done = list(set(result['Entry'].tolist() + result['Entry name'].tolist()))
+                    ids_done = list(set(result['Entry'].tolist() + result['Entry name'].tolist()))
+                except:
+                    print(output + ' was found. However, it could not be parsed. Will restart mapping.')
+                    result = pd.DataFrame()
+                    ids_done = list()
         else:
-            print(output + ' not found. Will perform mapping for all IDs.')
+            print(output + ' not found or empty. Will perform mapping for all IDs.')
             result = pd.DataFrame()
             ids_done = list()
         tries = 0
