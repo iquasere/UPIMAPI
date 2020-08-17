@@ -183,7 +183,7 @@ class UPIMAPI:
         
     def recursive_uniprot_information(self, ids, output, max_iter = 5, excel = False,
                                       columns = list(), databases = list(), step = 1000):
-        if os.path.isfile(output) and not os.stat("file").st_size == 0:
+        if os.path.isfile(output) and not os.stat(output).st_size == 0:
                 try:
                     print(output + ' was found. Will perform mapping for the remaining IDs.')
                     result = (pd.read_csv(output, sep = '\t', low_memory=False) if not
