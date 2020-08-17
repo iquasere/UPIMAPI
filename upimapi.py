@@ -13,7 +13,7 @@ from io import StringIO
 import pandas as pd
 import argparse, time, os, urllib.request, urllib.parse, urllib.error
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 upmap = UniprotSupport()
 
@@ -152,7 +152,9 @@ class UPIMAPI:
             print(output + ' not found. Will perform mapping for all IDs.')
             ids_done = list()
         tries = 0
-        ids_unmapped_output = '/'.join(output.split('/')[:-1]) + '/ids_unmapped.txt'
+        ids_unmapped_output = '{}{}ids_unmapped.txt'.format('/'.join(output.split('/')[:-1]),
+                            '/' if '/' in output else ''
+                                                           
         ids_missing = list(set(all_ids) - set(ids_done))
         
         tries = 0
@@ -191,7 +193,8 @@ class UPIMAPI:
             result = pd.DataFrame()
             ids_done = list()
         tries = 0
-        ids_unmapped_output = '/'.join(output.split('/')[:-1]) + '/ids_unmapped.txt'
+        ids_unmapped_output = '{}{}ids_unmapped.txt'.format('/'.join(output.split('/')[:-1]),
+                            '/' if '/' in output else ''
         ids_missing = list(set(ids) - set(ids_done))
         last_ids_missing = None
         
