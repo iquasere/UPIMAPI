@@ -1,5 +1,5 @@
 {% set name = "upimapi" %}
-{% set version = "1.0.4" %}
+{% set version = "1.0.5" %}
 {% set sha256 = "e5eda4953af1bbb20c7a4dc79bb8975603bd0cac666218cdc753f8cf3f9ca716" %}
 
 package:
@@ -21,6 +21,8 @@ requirements:
     - pandas
     - openpyxl
     - xlrd
+    - diamond
+    - subprocess
 
 test:
   commands:
