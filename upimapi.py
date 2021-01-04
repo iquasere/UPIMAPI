@@ -40,7 +40,7 @@ class UPIMAPI:
                                 2. a BLAST TSV result file (requires to be specified with the --blast parameter
                                 3. a protein FASTA file to be annotated (requires the --use-diamond and -db parameters)
                                 4. nothing! If so, will read input from command line, and parse as CSV (id1,id2,...)""")
-        parser.add_argument("-o", "--output", help="foldername of output", default=".")
+        parser.add_argument("-o", "--output", help="filename of output of UniProt information", default="uniprotinfo")
         parser.add_argument("--excel", action="store_true", default=False,
                             help="Will produce output in EXCEL format (default is TSV)")
         parser.add_argument("-anncols", "--annotation-columns", default='',
@@ -59,17 +59,21 @@ class UPIMAPI:
 
         diamond_args = parser.add_argument_group('DIAMOND arguments')
         diamond_args.add_argument("--use-diamond", action="store_true", default=False,
-                            help='''Use DIAMOND to annotate sequences before mapping IDs. Requires protein FASTA files 
-                                    as input for "-db" and "-i" parameters''')
-        diamond_args.add_argument("-db", "--database", default=None, help="""Reference database for annotation with DIAMOND. 
-                NOTICE: if database's IDs are in 'full' format (tr|XXX|XXX), specify with ""--full-id" parameter.""")
+                                  help='''Use DIAMOND to annotate sequences before mapping IDs. Requires protein FASTA 
+                                  files as input for "-db" and "-i" parameters''')
+        diamond_args.add_argument("-do", "--diamond-output", default="diamond_output",
+                                  help="DIAMOND's output foldername")
+        diamond_args.add_argument("-db", "--database", default=None,
+                                  help="""Reference database for annotation with DIAMOND. NOTICE: if database's IDs are 
+                                  in 'full' format (tr|XXX|XXX), specify with ""--full-id" parameter.""")
         diamond_args.add_argument("-t", "--threads", default='1', help="Number of threads to use in annotation steps")
         diamond_args.add_argument("-mts", "--max-target-seqs", default='50',
-                            help="Number of annotations to output per sequence inputed")
+                                  help="Number of annotations to output per sequence inputed")
         diamond_args.add_argument("-b", "--block-size", help="Number of annotations to output per sequence inputed")
         diamond_args.add_argument("-c", "--index-chunks", help="Number of annotations to output per sequence inputed")
+
         args = parser.parse_args()
-        args.output = args.output.rstrip('/')
+        args.diamond_output = args.diamond_output.rstrip('/')
 
         return args
 
@@ -156,7 +160,7 @@ class UPIMAPI:
         print('Retrieving UniProt information from ' + str(len(ids)) + ' IDs.')
         result = pd.DataFrame()
         for i in pbar(range(0, len(ids), step)):
-            j = i + step if i + step < len(ids) else len(ids)
+            j = min(i + step, len(ids))
             try:
                 data = self.uniprot_request(ids[i:j], original_database,
                                             database_destination, columns=columns,
@@ -189,7 +193,7 @@ class UPIMAPI:
         print('Building FASTA from ' + str(len(ids)) + ' IDs.')
         result = str()
         for i in pbar(range(0, len(ids), step)):
-            j = i + step if i + step < len(ids) else len(ids)
+            j = min(i + step, len(ids))
             data = self.uniprot_request(ids[i:j], original_database='ACC+ID',
                                         database_destination='', output_format='fasta')
             if len(data) > 0:
@@ -345,10 +349,10 @@ class UPIMAPI:
                 self.generate_diamond_database(args.database, '{}.dmnd'.format('.'.join(args.database.split('.')[:-1])))
                 args.database = '{}.dmnd'.format('.'.join(args.database.split('.')[:-1]))
             (b, c) = self.b_n_c(argsb=args.block_size, argsc=args.index_chunks)
-            self.run_diamond(args.input, '{}/aligned.blast'.format(args.output),
-                             '{}/unaligned.blast'.format(args.output), args.database, threads=args.threads,
+            self.run_diamond(args.input, '{}/aligned.blast'.format(args.diamond_output),
+                             '{}/unaligned.blast'.format(args.diamond_output), args.database, threads=args.threads,
                              max_target_seqs=args.max_target_seqs, b=b, c=c)
-            args.input = '{}/aligned.blast'.format(args.output)
+            args.input = '{}/aligned.blast'.format(args.diamond_output)
             args.blast = True
 
         # Get IDs from STDIN and set input type
@@ -368,12 +372,11 @@ class UPIMAPI:
             columns = args.annotation_columns.split(',') if args.annotation_columns != '' else list()
             databases = args.annotation_databases.split(',') if args.annotation_databases != '' else list()
 
-            self.recursive_uniprot_information(ids, '{}/uniprotinfo.{}'.format(args.output,
-                                                                               'xlsx' if args.excel else 'tsv'),
+            self.recursive_uniprot_information(ids, '{}.{}'.format(args.output, 'xlsx' if args.excel else 'tsv'),
                                                columns=columns, databases=databases, excel=args.excel,
                                                step=int(args.step))
         else:
-            self.recursive_uniprot_fasta(ids, '{}/uniprotinfo.fasta'.format(args.output), step=int(args.step))
+            self.recursive_uniprot_fasta(ids, '{}.fasta'.format(args.output), step=int(args.step))
 
 
 if __name__ == '__main__':
