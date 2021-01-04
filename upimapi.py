@@ -22,7 +22,7 @@ from progressbar import ProgressBar
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.0.5'
+__version__ = '1.1.0'
 
 upmap = UniprotSupport()
 
@@ -240,7 +240,7 @@ class UPIMAPI:
 
     def recursive_uniprot_information(self, ids, output, max_iter=5, excel=False,
                                       columns=list(), databases=list(), step=1000):
-        if os.path.isfile(output) and not os.stat(output).st_size > 1:
+        if os.path.isfile(output) and os.stat(output).st_size > 1:
             try:
                 result = (pd.read_csv(output, sep='\t', low_memory=False) if not
                 excel else pd.read_excel(output)).drop_duplicates()
