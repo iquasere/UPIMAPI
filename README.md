@@ -33,12 +33,26 @@ Information obtained with UPIMAPI can come in two forms:
 * the base (default) workflow obtains information for the list of columns and databases inputted
 * the "fasta" workflow, specified with the ```--fasta``` argument, results in a FASTA file with the protein sequences correspondent to the inputted IDs
 
-## Base arguments for running UPIMAPI
+### Example commands
 
-UPIMAPI takes either a list of UniProt IDs (one per line) or a BLAST file as input.
+Get (default) columns and databases information from a list of ids (one per line): will produce uniprotinfo.tsv in working directory
 ```
-python upimapi.py -i ids.txt -o uniprotinfo.tsv
-python upimapi.py -i aligned.blast --blast -o uniprotinfo.tsv
+upimapi.py -i ids.txt -o uniprotinfo
+```
+Get same information for an annotation result, where IDs are in full form (tr|XXX|XXX)
+```
+upimapi.py -i aligned.blast -o uniprotinfo --blast --full-id
+```
+Get FASTA sequences from a list of ids: will produce output_directory/uniprotinfo.fasta
+```
+upimapi.py -i ids.txt --fasta -o output_directory/uniprotinfo
+```
+Annotate FASTA protein sequences (.faa) and get information in EXCEL format. Will produce, in output_folder: 
+1. uniprotinfo.xlsx - UniProt information in EXCEL format  
+2. aligned.blast - BLAST result, output format 6
+3. unaligned.blast - non annotated sequences, in FASTA format
+```
+upimapi.py -i sequences.fasta -o output_folder/uniprotinfo  --excel --use-diamond -db path/to/database.fasta -od output_folder
 ```
 
 ## Additional parameters
