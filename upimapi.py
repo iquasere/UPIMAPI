@@ -50,21 +50,24 @@ class UPIMAPI:
         parser.add_argument("--blast", action="store_true", default=False,
                             help="If input file is in BLAST TSV format (will consider one ID per line if not set)")
         parser.add_argument("--full-id", action="store_true", default=False,
-                            help="If IDs are in 'full' format: tr|XXX|XXX")
+                            help="If IDs in database are in 'full' format: tr|XXX|XXX")
         parser.add_argument("--fasta", help="Output will be generated in FASTA format",
                             action="store_true", default=False)
         parser.add_argument("--step", default='1000',
                             help="How many IDs to submit per request to the API (default is 1000)")
-        parser.add_argument("--use-diamond", action="store_true", default=False,
-                            help='''Use DIAMOND to annotate sequences before mapping IDs. Requires protein FASTA files 
-                            as input for "-db" and "-i" parameters''')
-        parser.add_argument("-db", "--database", default=None, help="""Reference database for annotation with DIAMOND. 
-                NOTICE: if database's IDs are in 'full' format (tr|XXX|XXX), specify with ""--full-id" parameter.""")
-        parser.add_argument("-t", "--threads", default='1', help="Number of threads to use in annotation steps")
-        parser.add_argument("-mts", "--max-target-seqs", default='50',
-                            help="Number of annotations to output per sequence inputed")
         parser.add_argument('-v', '--version', action='version', version='UPIMAPI ' + __version__)
 
+        diamond_args = parser.add_argument_group('DIAMOND arguments')
+        diamond_args.add_argument("--use-diamond", action="store_true", default=False,
+                            help='''Use DIAMOND to annotate sequences before mapping IDs. Requires protein FASTA files 
+                                    as input for "-db" and "-i" parameters''')
+        diamond_args.add_argument("-db", "--database", default=None, help="""Reference database for annotation with DIAMOND. 
+                NOTICE: if database's IDs are in 'full' format (tr|XXX|XXX), specify with ""--full-id" parameter.""")
+        diamond_args.add_argument("-t", "--threads", default='1', help="Number of threads to use in annotation steps")
+        diamond_args.add_argument("-mts", "--max-target-seqs", default='50',
+                            help="Number of annotations to output per sequence inputed")
+        diamond_args.add_argument("-b", "--block-size", help="Number of annotations to output per sequence inputed")
+        diamond_args.add_argument("-c", "--index-chunks", help="Number of annotations to output per sequence inputed")
         args = parser.parse_args()
         args.output = args.output.rstrip('/')
 
@@ -312,13 +315,19 @@ class UPIMAPI:
     def generate_diamond_database(self, fasta, dmnd):
         self.run_command('diamond makedb --in {} -d {}'.format(fasta, dmnd))
 
-    def b_n_c(self):
-        b = psutil.virtual_memory().available / (1024.0 ** 3) / 20      # b = memory in Gb / 20
+    def b_n_c(self, argsb, argsc):
+        print(argsb, argsc)
+        if argsb is not None:
+            b = argsb
+        else:
+            b = psutil.virtual_memory().available / (1024.0 ** 3) / 20      # b = memory in Gb / 20
+        if argsc is not None:
+            return b, argsc
         if b > 3:
             return b, 1
-        elif b > 2:
+        if b > 2:
             return b, 2
-        elif b > 1:
+        if b > 1:
             return b, 3
         return b, 4
 
@@ -335,7 +344,7 @@ class UPIMAPI:
             if not args.database.endswith(".dmnd"):
                 self.generate_diamond_database(args.database, '{}.dmnd'.format('.'.join(args.database.split('.')[:-1])))
                 args.database = '{}.dmnd'.format('.'.join(args.database.split('.')[:-1]))
-            (b, c) = self.b_n_c()
+            (b, c) = self.b_n_c(argsb=args.block_size, argsc=args.index_chunks)
             self.run_diamond(args.input, '{}/aligned.blast'.format(args.output),
                              '{}/unaligned.blast'.format(args.output), args.database, threads=args.threads,
                              max_target_seqs=args.max_target_seqs, b=b, c=c)

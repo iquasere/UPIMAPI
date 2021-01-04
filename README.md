@@ -2,20 +2,36 @@
 
 A tool for retrieving huge ammounts of information from UniProt! 
 UPIMAPI is a command line interface for using UniProt's API, which allows to access [UniProt's ID mapping](https://www.uniprot.org/uploadlists/) programmatically!
-UPIMAPI was developed as part of the [MOSCA](https://github.com/iquasere/MOSCA) pipeline. It is best used when having a big number of UniProt IDs (like, millions) for which information is required.
+UPIMAPI can handle big numbers of UniProt IDs (like, millions) for which information can be obtained in a single command.
+UPIMAPI also allows to first perform annotation with DIAMOND, connecting its powerfull annotation with the convenience of directly obtaining information from UniProt.
 
-## Setting up UPIMAPI
+## Installing UPIMAPI
 
-UPIMAPI files can be retrieved from git.
+To install UPIMAPI through Bioconda, run
 ```
-git clone https://github.com/iquasere/UPIMAPI.git
+conda install -c conda-forge -c bioconda upimapi
+```
+To check if it was installed correctly, run
+```
+upimapi.py --version
 ```
 
-UPIMAPI requires several packages already installed. They can all be installed with pip.
-```
-cd UPIMAPI
-pip install requirements.txt
-```
+## Running UPIMAPI
+
+UPIMAPI can be used to first perform annotation with DIAMOND, or directly inputing UniProt IDs to it.
+
+### Running DIAMOND first
+
+To run DIAMOND, the argument ```--use-diamond``` must be specified, and the input most come in FASTA protein format (.faa).
+The reference database for aligning the query sequences must be specified with the ```--database``` argument. 
+Optionally, parameters for ```--threads```, ```--block-size``` and ```--index-chunks``` can also be specified to speed DIAMOND annotation. 
+If not specified, UPIMAPI will automatically determine best values for each of them.
+
+### Outputs
+
+Information obtained with UPIMAPI can come in two forms:
+* the base (default) workflow obtains information for the list of columns and databases inputted
+* the "fasta" workflow, specified with the ```--fasta``` argument, results in a FASTA file with the protein sequences correspondent to the inputted IDs
 
 ## Base arguments for running UPIMAPI
 
@@ -59,11 +75,4 @@ optional arguments:
 A tool for retrieving information from UniProt.
 ```
 
-## UPIMAPI is available through Bioconda!
-
-To install UPIMAPI through bioconda and run it, simply pass these commands:
-```
-conda install -c bioconda upimapi
-upimapi.py [arguments]
-```
-**NOTE:** there is no need to explicitly declare python use when installing with Bioconda!
+#
