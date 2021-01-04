@@ -14,6 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import subprocess
+import psutil
 from io import StringIO
 
 import pandas as pd
@@ -57,7 +58,7 @@ class UPIMAPI:
         parser.add_argument("--use-diamond", action="store_true", default=False,
                             help='''Use DIAMOND to annotate sequences before mapping IDs. Requires protein FASTA files 
                             as input for "-db" and "-i" parameters''')
-        parser.add_argument("--database", default=None, help="""Reference database for annotation with DIAMOND. 
+        parser.add_argument("-db", "--database", default=None, help="""Reference database for annotation with DIAMOND. 
                 NOTICE: if database's IDs are in 'full' format (tr|XXX|XXX), specify with ""--full-id" parameter.""")
         parser.add_argument("-t", "--threads", default='1', help="Number of threads to use in annotation steps")
         parser.add_argument("-mts", "--max-target-seqs", default='50',
@@ -311,9 +312,20 @@ class UPIMAPI:
     def generate_diamond_database(self, fasta, dmnd):
         self.run_command('diamond makedb --in {} -d {}'.format(fasta, dmnd))
 
-    def run_diamond(self, query, aligned, unaligned, database, threads='12', max_target_seqs='50'):
+    def b_n_c(self):
+        b = psutil.virtual_memory().available / (1024.0 ** 3) / 20      # b = memory in Gb / 20
+        if b > 3:
+            return b, 1
+        elif b > 2:
+            return b, 2
+        elif b > 1:
+            return b, 3
+        return b, 4
+
+    def run_diamond(self, query, aligned, unaligned, database, threads='12', max_target_seqs='50', b=1, c=4):
         self.run_command("diamond blastp --query {} --out {} --un {} --db {} --outfmt 6 --unal 1 --threads {} "
-                         "--max-target-seqs {}".format(query, aligned, unaligned, database, threads, max_target_seqs))
+                         "--max-target-seqs {} -b {} -c {}".format(query, aligned, unaligned, database, threads,
+                                                                   max_target_seqs, b, c))
 
     def upimapi(self):
         args = self.get_arguments()
@@ -323,8 +335,10 @@ class UPIMAPI:
             if not args.database.endswith(".dmnd"):
                 self.generate_diamond_database(args.database, '{}.dmnd'.format('.'.join(args.database.split('.')[:-1])))
                 args.database = '{}.dmnd'.format('.'.join(args.database.split('.')[:-1]))
-            self.run_diamond(args.input, '{}/aligned.blast'.format(args.output), '{}/unaligned.blast'.format(
-                args.output), args.database, args.threads, args.max_target_seqs)
+            (b, c) = self.b_n_c()
+            self.run_diamond(args.input, '{}/aligned.blast'.format(args.output),
+                             '{}/unaligned.blast'.format(args.output), args.database, threads=args.threads,
+                             max_target_seqs=args.max_target_seqs, b=b, c=c)
             args.input = '{}/aligned.blast'.format(args.output)
             args.blast = True
 
@@ -345,12 +359,12 @@ class UPIMAPI:
             columns = args.annotation_columns.split(',') if args.annotation_columns != '' else list()
             databases = args.annotation_databases.split(',') if args.annotation_databases != '' else list()
 
-            self.recursive_uniprot_information(ids, args.output + ('.xlsx' if
-                                                                   args.excel else '.tsv'), columns=columns,
-                                               databases=databases,
-                                               excel=args.excel, step=int(args.step))
+            self.recursive_uniprot_information(ids, '{}/uniprotinfo.{}'.format(args.output,
+                                                                               'xlsx' if args.excel else 'tsv'),
+                                               columns=columns, databases=databases, excel=args.excel,
+                                               step=int(args.step))
         else:
-            self.recursive_uniprot_fasta(ids, args.output, step=int(args.step))
+            self.recursive_uniprot_fasta(ids, '{}/uniprotinfo.fasta'.format(args.output), step=int(args.step))
 
 
 if __name__ == '__main__':
