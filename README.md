@@ -44,35 +44,51 @@ python upimapi.py -i aligned.blast --blast -o uniprotinfo.tsv
 ## Additional parameters
 
 ```
-usage: upimapi.py [-h] [-i INPUT] [-o OUTPUT] [--excel]
-                  [-anncols ANNOTATION_COLUMNS] [-anndbs ANNOTATION_DATABASES]
-                  [--blast] [--full-id] [--fasta] [--step STEP] [-v]
-
-UniProt Id Mapping through API
-
 optional arguments:
   -h, --help            show this help message and exit
   -i INPUT, --input INPUT
-                        Input filename - can be a list of IDs (one per line)
-                        or a BLAST TSV file - if so, specify with the --blast
-                        parameter. If no file is given as input, will read
-                        from command line input
+                        Input filename - can be: 
+                        1. a file containing a list of IDs (one per line) 
+                        2. a BLAST TSV result file (requires to be specified 
+                        with the --blast parameter
+                        3. a protein FASTA file to be annotated (requires the
+                        --use-diamond and -db parameters) 
+                        4. nothing! If so, will read input from command line, 
+                        and parse as CSV (id1,id2,...)
   -o OUTPUT, --output OUTPUT
-                        filename of output
+                        filename of output of UniProt information
   --excel               Will produce output in EXCEL format (default is TSV)
   -anncols ANNOTATION_COLUMNS, --annotation-columns ANNOTATION_COLUMNS
                         List of UniProt columns to obtain information from
   -anndbs ANNOTATION_DATABASES, --annotation-databases ANNOTATION_DATABASES
                         List of databases to cross-check with UniProt
                         information
-  --blast               If input file is in BLAST TSV format
-  --full-id             If IDs are in 'full' format: tr|XXX|XXX
+  --blast               If input file is in BLAST TSV format (will consider
+                        one ID per line if not set)
+  --full-id             If IDs in database are in 'full' format: tr|XXX|XXX
   --fasta               Output will be generated in FASTA format
   --step STEP           How many IDs to submit per request to the API (default
                         is 1000)
   -v, --version         show program's version number and exit
 
-A tool for retrieving information from UniProt.
+DIAMOND arguments:
+  --use-diamond         Use DIAMOND to annotate sequences before mapping IDs.
+                        Requires protein FASTA files as input for "-db" and
+                        "-i" parameters
+  -do DIAMOND_OUTPUT, --diamond-output DIAMOND_OUTPUT
+                        DIAMOND's output foldername
+  -db DATABASE, --database DATABASE
+                        Reference database for annotation with DIAMOND.
+                        NOTICE: if database's IDs are in 'full' format
+                        (tr|XXX|XXX), specify with ""--full-id" parameter.
+  -t THREADS, --threads THREADS
+                        Number of threads to use in annotation steps
+  -mts MAX_TARGET_SEQS, --max-target-seqs MAX_TARGET_SEQS
+                        Number of annotations to output per sequence inputed
+  -b BLOCK_SIZE, --block-size BLOCK_SIZE
+                        Number of annotations to output per sequence inputed
+  -c INDEX_CHUNKS, --index-chunks INDEX_CHUNKS
+                        Number of annotations to output per sequence inputed
 ```
 
 #
