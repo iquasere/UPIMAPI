@@ -22,7 +22,7 @@ from progressbar import ProgressBar
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.1.0'
+__version__ = '1.1.1'
 
 upmap = UniprotSupport()
 
@@ -208,9 +208,6 @@ class UPIMAPI:
         else:
             print(output + ' not found. Will perform mapping for all IDs.')
             ids_done = list()
-        tries = 0
-        ids_unmapped_output = '{}{}ids_unmapped.txt'.format('/'.join(output.split('/')[:-1]),
-                                                            '/' if '/' in output else '')
 
         ids_missing = list(set(all_ids) - set(ids_done))
 
@@ -232,7 +229,7 @@ class UPIMAPI:
             print('Results for all IDs are available at ' + output)
         else:
             ids_unmapped_output = '/'.join(output.split('/')[:-1]) + '/ids_unmapped.txt'
-            handler = open(ids_unmapped_output, 'w')
+            handler = open(ids_unmapped_output, 'a')
             handler.write('\n'.join(ids_missing))
             print('Maximum iterations were made. Results related to {} IDs were not obtained. IDs with missing '
                   'information are available at {} and information obtained is available at {}'.format(
@@ -290,15 +287,12 @@ class UPIMAPI:
         if len(ids_missing) == 0:
             print('Results for all IDs are available at ' + output)
         else:
-            open(ids_unmapped_output, 'w').write('\n'.join(ids_missing))
+            open(ids_unmapped_output, 'a').write('\n'.join(ids_missing))
             print("Maximum iterations were made. Results related to {} IDs were not obtained. IDs with missing "
                   "information are available at {} and information obtained is available at {}".format(
                     str(len(ids_missing)), ids_unmapped_output, output))
 
-    '''
-    Input:
-    Output:
-    '''
+
     def get_ids(self, inpute, input_type='blast', full_id=False):
         if input_type == 'blast':
             ids = self.parse_blast(inpute)['sseqid']
