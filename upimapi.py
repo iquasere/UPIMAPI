@@ -22,7 +22,7 @@ from progressbar import ProgressBar
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.1.1'
+__version__ = '1.1.2'
 
 upmap = UniprotSupport()
 
@@ -55,6 +55,8 @@ class UPIMAPI:
                             action="store_true", default=False)
         parser.add_argument("--step", default='1000',
                             help="How many IDs to submit per request to the API (default is 1000)")
+        parser.add_argument("--max-tries", default=3, type=int,
+                            help="How many times to try obtaining information from UniProt before giving up")
         parser.add_argument('-v', '--version', action='version', version='UPIMAPI ' + __version__)
 
         diamond_args = parser.add_argument_group('DIAMOND arguments')
@@ -155,28 +157,31 @@ class UPIMAPI:
     '''
     def get_uniprot_information(self, ids, original_database='ACC+ID',
                                 database_destination='', step=1000, sleep=30,
-                                columns=list(), databases=list()):
+                                columns=list(), databases=list(), max_tries=3):
         pbar = ProgressBar()
         print('Retrieving UniProt information from ' + str(len(ids)) + ' IDs.')
         result = pd.DataFrame()
         for i in pbar(range(0, len(ids), step)):
+            tries = 0
+            done = False
             j = min(i + step, len(ids))
-            try:
-                data = self.uniprot_request(ids[i:j], original_database,
-                                            database_destination, columns=columns,
-                                            databases=databases)
-                if len(data) > 0:
-                    uniprotinfo = pd.read_csv(StringIO(data), sep='\t')
-                    k = (len(uniprotinfo.columns) - (30 if (len(columns + databases) == 0
-                                                            or (columns == [''] and databases == ['']))
-                                                     else (
-                                len(columns) + len(databases))))  # Removes the "yourlist:" and "isomap:" columns
-                    uniprotinfo = uniprotinfo[uniprotinfo.columns.tolist()[:-k]]
-                    result = pd.concat([result, uniprotinfo[uniprotinfo.columns.tolist()]])
-                time.sleep(sleep)
-            except:
-                print('Mapping failed at some point!')
-                return result
+            while not done and tries < max_tries:
+                try:
+                    data = self.uniprot_request(ids[i:j], original_database,
+                                                database_destination, columns=columns,
+                                                databases=databases)
+                    if len(data) > 0:
+                        uniprotinfo = pd.read_csv(StringIO(data), sep='\t')
+                        k = (len(uniprotinfo.columns) - (30 if (
+                                len(columns + databases) == 0 or (columns == [''] and databases == [''])
+                        ) else (len(columns) + len(databases))))  # Removes the "yourlist:" and "isomap:" columns
+                        uniprotinfo = uniprotinfo[uniprotinfo.columns.tolist()[:-k]]
+                        result = pd.concat([result, uniprotinfo[uniprotinfo.columns.tolist()]])
+                    time.sleep(sleep)
+                    done = True
+                except:
+                    i += 1
+                    time.sleep(10)
         return result
 
     '''
@@ -265,7 +270,7 @@ class UPIMAPI:
                 str(len(ids_done)), str(len(ids_missing))))
             last_ids_missing = ids_missing
             uniprotinfo = self.get_uniprot_information(ids_missing, step=step,
-                                                       columns=columns, databases=databases)
+                                                       columns=columns, databases=databases, max_tries=max_iter)
             if len(uniprotinfo) > 0:
                 ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry name'].tolist()))
                 result = pd.concat([result, uniprotinfo], ignore_index=True)
@@ -368,7 +373,7 @@ class UPIMAPI:
 
             self.recursive_uniprot_information(ids, '{}.{}'.format(args.output, 'xlsx' if args.excel else 'tsv'),
                                                columns=columns, databases=databases, excel=args.excel,
-                                               step=int(args.step))
+                                               step=int(args.step), max_iter=args.max_tries)
         else:
             self.recursive_uniprot_fasta(ids, '{}.fasta'.format(args.output), step=int(args.step))
 
