@@ -22,7 +22,7 @@ from progressbar import ProgressBar
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.1.2'
+__version__ = '1.1.3'
 
 upmap = UniprotSupport()
 
@@ -379,4 +379,6 @@ class UPIMAPI:
 
 
 if __name__ == '__main__':
+    start_time = time.time()
     UPIMAPI().upimapi()
+    print('UPIMAPI analysis finished in {}'.format(time.strftime("%Hh%Mm%Ss", time.gmtime(time.time() - start_time))))
