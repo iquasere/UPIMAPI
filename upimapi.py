@@ -15,6 +15,7 @@ import urllib.parse
 import urllib.request
 import subprocess
 import psutil
+import pathlib
 from io import StringIO
 
 import pandas as pd
@@ -22,7 +23,7 @@ from progressbar import ProgressBar
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.1.3'
+__version__ = '1.1.4'
 
 upmap = UniprotSupport()
 
@@ -71,8 +72,12 @@ class UPIMAPI:
         diamond_args.add_argument("-t", "--threads", default='1', help="Number of threads to use in annotation steps")
         diamond_args.add_argument("-mts", "--max-target-seqs", default='50',
                                   help="Number of annotations to output per sequence inputed")
-        diamond_args.add_argument("-b", "--block-size", help="Number of annotations to output per sequence inputed")
-        diamond_args.add_argument("-c", "--index-chunks", help="Number of annotations to output per sequence inputed")
+        diamond_args.add_argument("-b", "--block-size", help="Billions of sequence letters to be processed at a time "
+                                                             "(UPIMAPI determines best value for this parameter if not "
+                                                             "set")
+        diamond_args.add_argument("-c", "--index-chunks", help="Number of chunks for processing the seed index "
+                                                             "(UPIMAPI determines best value for this parameter if not "
+                                                             "set")
 
         args = parser.parse_args()
         args.diamond_output = args.diamond_output.rstrip('/')
@@ -240,8 +245,8 @@ class UPIMAPI:
                   'information are available at {} and information obtained is available at {}'.format(
                     str(len(ids_missing)), ids_unmapped_output, output))
 
-    def recursive_uniprot_information(self, ids, output, max_iter=5, excel=False,
-                                      columns=list(), databases=list(), step=1000):
+    def recursive_uniprot_information(self, ids, output, max_iter=5, excel=False, columns=list(), databases=list(),
+                                      step=1000):
         if os.path.isfile(output) and os.stat(output).st_size > 1:
             try:
                 result = (pd.read_csv(output, sep='\t', low_memory=False) if not
@@ -341,9 +346,12 @@ class UPIMAPI:
 
     def upimapi(self):
         args = self.get_arguments()
+        pathlib.Path('/'.join(args.output.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
 
         # Using annotation with DIAMOND
         if args.use_diamond:
+            pathlib.Path(args.diamond_output).mkdir(parents=True, exist_ok=True)
+
             if not args.database.endswith(".dmnd"):
                 self.generate_diamond_database(args.database, '{}.dmnd'.format('.'.join(args.database.split('.')[:-1])))
                 args.database = '{}.dmnd'.format('.'.join(args.database.split('.')[:-1]))
