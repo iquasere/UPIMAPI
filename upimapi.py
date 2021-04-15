@@ -16,6 +16,7 @@ import urllib.request
 import subprocess
 import psutil
 import pathlib
+import multiprocessing
 from io import StringIO
 
 import pandas as pd
@@ -23,7 +24,7 @@ from progressbar import ProgressBar
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.1.4'
+__version__ = '1.2.0'
 
 upmap = UniprotSupport()
 
@@ -41,13 +42,11 @@ class UPIMAPI:
                                 2. a BLAST TSV result file (requires to be specified with the --blast parameter
                                 3. a protein FASTA file to be annotated (requires the --use-diamond and -db parameters)
                                 4. nothing! If so, will read input from command line, and parse as CSV (id1,id2,...)""")
-        parser.add_argument("-o", "--output", help="filename of output of UniProt information", default="uniprotinfo")
-        parser.add_argument("--excel", action="store_true", default=False,
-                            help="Will produce output in EXCEL format (default is TSV)")
+        parser.add_argument("-o", "--output", help="Folder to store outputs", default="UPIMAPI_output")
         parser.add_argument("-anncols", "--annotation-columns", default='',
-                            help="List of UniProt columns to obtain information from")
+                            help="List of UniProt columns to obtain information from (separated by &)")
         parser.add_argument("-anndbs", "--annotation-databases", default='',
-                            help="List of databases to cross-check with UniProt information")
+                            help="List of databases to cross-check with UniProt information (separated by &)")
         parser.add_argument("--blast", action="store_true", default=False,
                             help="If input file is in BLAST TSV format (will consider one ID per line if not set)")
         parser.add_argument("--full-id", action="store_true", default=False,
@@ -64,23 +63,22 @@ class UPIMAPI:
         diamond_args.add_argument("--use-diamond", action="store_true", default=False,
                                   help='''Use DIAMOND to annotate sequences before mapping IDs. Requires protein FASTA 
                                   files as input for "-db" and "-i" parameters''')
-        diamond_args.add_argument("-do", "--diamond-output", default="diamond_output",
-                                  help="DIAMOND's output foldername")
         diamond_args.add_argument("-db", "--database", default=None,
                                   help="""Reference database for annotation with DIAMOND. NOTICE: if database's IDs are 
                                   in 'full' format (tr|XXX|XXX), specify with ""--full-id" parameter.""")
-        diamond_args.add_argument("-t", "--threads", default='1', help="Number of threads to use in annotation steps")
+        diamond_args.add_argument("-t", "--threads", default=multiprocessing.cpu_count() - 2,
+                                  help="Number of threads to use in annotation steps")
         diamond_args.add_argument("-mts", "--max-target-seqs", default='50',
                                   help="Number of annotations to output per sequence inputed")
-        diamond_args.add_argument("-b", "--block-size", help="Billions of sequence letters to be processed at a time "
-                                                             "(UPIMAPI determines best value for this parameter if not "
-                                                             "set")
-        diamond_args.add_argument("-c", "--index-chunks", help="Number of chunks for processing the seed index "
-                                                             "(UPIMAPI determines best value for this parameter if not "
-                                                             "set")
+        diamond_args.add_argument("-b", "--block-size",
+                                  help="Billions of sequence letters to be processed at a time (UPIMAPI determines best "
+                                       "value for this parameter if not set")
+        diamond_args.add_argument("-c", "--index-chunks",
+                                  help="Number of chunks for processing the seed index (UPIMAPI determines best value "
+                                       "for this parameter if not set")
 
         args = parser.parse_args()
-        args.diamond_output = args.diamond_output.rstrip('/')
+        args._output = args.output.rstrip('/')
 
         return args
 
@@ -185,7 +183,8 @@ class UPIMAPI:
                     time.sleep(sleep)
                     done = True
                 except:
-                    i += 1
+                    print('ID mapping failed. Remaining tries: {}'.format(max_tries - tries))
+                    tries += 1
                     time.sleep(10)
         return result
 
@@ -245,12 +244,10 @@ class UPIMAPI:
                   'information are available at {} and information obtained is available at {}'.format(
                     str(len(ids_missing)), ids_unmapped_output, output))
 
-    def recursive_uniprot_information(self, ids, output, max_iter=5, excel=False, columns=list(), databases=list(),
-                                      step=1000):
+    def recursive_uniprot_information(self, ids, output, max_iter=5, columns=list(), databases=list(), step=1000):
         if os.path.isfile(output) and os.stat(output).st_size > 1:
             try:
-                result = (pd.read_csv(output, sep='\t', low_memory=False) if not
-                excel else pd.read_excel(output)).drop_duplicates()
+                result = pd.read_csv(output, sep='\t', low_memory=False).drop_duplicates()
                 print(output + ' was found. Will perform mapping for the remaining IDs.')
                 ids_done = list(set(result['Entry'].tolist() + result['Entry name'].tolist()))
             except:
@@ -289,10 +286,7 @@ class UPIMAPI:
                     print('Failed to retrieve information for some IDs. Retrying request.')
                     tries += 1
 
-        if not excel:
-            result.to_csv(output, sep='\t', index=False)
-        else:
-            result.to_excel(output, index=False)
+        result.to_csv(output, sep='\t', index=False)
 
         if len(ids_missing) == 0:
             print('Results for all IDs are available at ' + output)
@@ -324,7 +318,6 @@ class UPIMAPI:
         self.run_command('diamond makedb --in {} -d {}'.format(fasta, dmnd))
 
     def b_n_c(self, argsb, argsc):
-        print(argsb, argsc)
         if argsb is not None:
             b = argsb
         else:
@@ -346,20 +339,18 @@ class UPIMAPI:
 
     def upimapi(self):
         args = self.get_arguments()
-        pathlib.Path('/'.join(args.output.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(args.output).mkdir(parents=True, exist_ok=True)
 
         # Using annotation with DIAMOND
         if args.use_diamond:
-            pathlib.Path(args.diamond_output).mkdir(parents=True, exist_ok=True)
-
             if not args.database.endswith(".dmnd"):
                 self.generate_diamond_database(args.database, '{}.dmnd'.format('.'.join(args.database.split('.')[:-1])))
                 args.database = '{}.dmnd'.format('.'.join(args.database.split('.')[:-1]))
             (b, c) = self.b_n_c(argsb=args.block_size, argsc=args.index_chunks)
-            self.run_diamond(args.input, '{}/aligned.blast'.format(args.diamond_output),
-                             '{}/unaligned.blast'.format(args.diamond_output), args.database, threads=args.threads,
-                             max_target_seqs=args.max_target_seqs, b=b, c=c)
-            args.input = '{}/aligned.blast'.format(args.diamond_output)
+            self.run_diamond(
+                args.input, '{}/aligned.blast'.format(args.output), '{}/unaligned.blast'.format(args.output),
+                args.database, threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c)
+            args.input = '{}/aligned.blast'.format(args.output)
             args.blast = True
 
         # Get IDs from STDIN and set input type
@@ -376,14 +367,22 @@ class UPIMAPI:
 
         # Get UniProt information
         if not args.fasta:
-            columns = args.annotation_columns.split(',') if args.annotation_columns != '' else list()
-            databases = args.annotation_databases.split(',') if args.annotation_databases != '' else list()
+            columns = args.annotation_columns.split('&') if args.annotation_columns != '' else list()
+            databases = args.annotation_databases.split('&') if args.annotation_databases != '' else list()
 
-            self.recursive_uniprot_information(ids, '{}.{}'.format(args.output, 'xlsx' if args.excel else 'tsv'),
-                                               columns=columns, databases=databases, excel=args.excel,
-                                               step=int(args.step), max_iter=args.max_tries)
+            self.recursive_uniprot_information(
+                ids, '{}/uniprotinfo.tsv'.format(args.output),
+                columns=columns, databases=databases, step=int(args.step), max_iter=args.max_tries)
+
+            if args.use_diamond:
+                blast = self.parse_blast('{}/aligned.blast'.format(args
+                                                                   .output))
+                if args.full_id:
+                    blast.sseqid = [ide.split('|')[1] if ide != '*' else ide for ide in blast.sseqid]
+                pd.merge(blast, pd.read_csv('{}/uniprotinfo.tsv'.format(args.output), sep='\t'), left_on='sseqid',
+                         right_on='Entry').to_excel('{}/UPIMAPI_results.xlsx'.format(args.output), index=False)
         else:
-            self.recursive_uniprot_fasta(ids, '{}.fasta'.format(args.output), step=int(args.step))
+            self.recursive_uniprot_fasta(ids, '{}/uniprotinfo.fasta'.format(args.output), step=int(args.step))
 
 
 if __name__ == '__main__':

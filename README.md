@@ -35,24 +35,24 @@ Information obtained with UPIMAPI can come in two forms:
 
 ### Example commands
 
-Get (default) columns and databases information from a list of ids (one per line): will produce uniprotinfo.tsv in working directory
+Get (default) columns and databases information from a list of ids (one per line): will produce uniprotinfo.tsv in ```output_directory```
 ```
-upimapi.py -i ids.txt -o uniprotinfo
+upimapi.py -i ids.txt -o output_directory
 ```
 Get same information for an annotation result, where IDs are in full form (tr|XXX|XXX)
 ```
-upimapi.py -i aligned.blast -o uniprotinfo --blast --full-id
+upimapi.py -i aligned.blast -o output_directory --blast --full-id
 ```
-Get FASTA sequences from a list of ids: will produce output_directory/uniprotinfo.fasta
+Get FASTA sequences from a list of ids: will produce ```output_directory/uniprotinfo.fasta```
 ```
-upimapi.py -i ids.txt --fasta -o output_directory/uniprotinfo
+upimapi.py -i ids.txt --fasta -o output_directory
 ```
-Annotate FASTA protein sequences (.faa) and get information in EXCEL format. Will produce, in output_folder: 
+Annotate FASTA protein sequences (.faa) and get information in EXCEL format. Will produce, in ```output_directory```: 
 1. uniprotinfo.xlsx - UniProt information in EXCEL format  
 2. aligned.blast - BLAST result, output format 6
 3. unaligned.blast - non annotated sequences, in FASTA format
 ```
-upimapi.py -i sequences.fasta -o output_folder/uniprotinfo  --excel --use-diamond -db path/to/database.fasta -od output_folder
+upimapi.py -i sequences.fasta -o output_directory --use-diamond -db path/to/database.fasta
 ```
 
 ## Additional parameters
@@ -61,36 +61,36 @@ upimapi.py -i sequences.fasta -o output_folder/uniprotinfo  --excel --use-diamon
 optional arguments:
   -h, --help            show this help message and exit
   -i INPUT, --input INPUT
-                        Input filename - can be: 
-                        1. a file containing a list of IDs (one per line) 
-                        2. a BLAST TSV result file (requires to be specified 
-                        with the --blast parameter
+                        Input filename - can be: 1. a file containing a list
+                        of IDs (one per line) 2. a BLAST TSV result file
+                        (requires to be specified with the --blast parameter
                         3. a protein FASTA file to be annotated (requires the
-                        --use-diamond and -db parameters) 
-                        4. nothing! If so, will read input from command line, 
-                        and parse as CSV (id1,id2,...)
+                        --use-diamond and -db parameters) 4. nothing! If so,
+                        will read input from command line, and parse as CSV
+                        (id1,id2,...)
   -o OUTPUT, --output OUTPUT
-                        filename of output of UniProt information
-  --excel               Will produce output in EXCEL format (default is TSV)
+                        Folder to store outputs
   -anncols ANNOTATION_COLUMNS, --annotation-columns ANNOTATION_COLUMNS
                         List of UniProt columns to obtain information from
+                        (separated by &)
   -anndbs ANNOTATION_DATABASES, --annotation-databases ANNOTATION_DATABASES
                         List of databases to cross-check with UniProt
-                        information
+                        information (separated by &)
   --blast               If input file is in BLAST TSV format (will consider
                         one ID per line if not set)
   --full-id             If IDs in database are in 'full' format: tr|XXX|XXX
   --fasta               Output will be generated in FASTA format
   --step STEP           How many IDs to submit per request to the API (default
                         is 1000)
+  --max-tries MAX_TRIES
+                        How many times to try obtaining information from
+                        UniProt before giving up
   -v, --version         show program's version number and exit
 
 DIAMOND arguments:
   --use-diamond         Use DIAMOND to annotate sequences before mapping IDs.
                         Requires protein FASTA files as input for "-db" and
                         "-i" parameters
-  -do DIAMOND_OUTPUT, --diamond-output DIAMOND_OUTPUT
-                        DIAMOND's output foldername
   -db DATABASE, --database DATABASE
                         Reference database for annotation with DIAMOND.
                         NOTICE: if database's IDs are in 'full' format
@@ -100,9 +100,11 @@ DIAMOND arguments:
   -mts MAX_TARGET_SEQS, --max-target-seqs MAX_TARGET_SEQS
                         Number of annotations to output per sequence inputed
   -b BLOCK_SIZE, --block-size BLOCK_SIZE
-                        Number of annotations to output per sequence inputed
+                        Billions of sequence letters to be processed at a time
+                        (UPIMAPI determines best value for this parameter if
+                        not set
   -c INDEX_CHUNKS, --index-chunks INDEX_CHUNKS
-                        Number of annotations to output per sequence inputed
+                        Number of chunks for processing the seed index
+                        (UPIMAPI determines best value for this parameter if
+                        not set
 ```
-
-#
