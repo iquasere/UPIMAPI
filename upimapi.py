@@ -24,7 +24,7 @@ from progressbar import ProgressBar
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.2.0'
+__version__ = '1.2.1'
 
 upmap = UniprotSupport()
 
@@ -53,11 +53,11 @@ class UPIMAPI:
                             help="If IDs in database are in 'full' format: tr|XXX|XXX")
         parser.add_argument("--fasta", help="Output will be generated in FASTA format",
                             action="store_true", default=False)
-        parser.add_argument("--step", default='1000',
-                            help="How many IDs to submit per request to the API (default is 1000)")
+        parser.add_argument("--step", type=int, default=1000,
+                            help="How many IDs to submit per request to the API (default: 1000)")
         parser.add_argument("--max-tries", default=3, type=int,
                             help="How many times to try obtaining information from UniProt before giving up")
-        parser.add_argument('-v', '--version', action='version', version='UPIMAPI ' + __version__)
+        parser.add_argument('-v', '--version', action='version', version=f'UPIMAPI {__version__}')
 
         diamond_args = parser.add_argument_group('DIAMOND arguments')
         diamond_args.add_argument("--use-diamond", action="store_true", default=False,
@@ -66,16 +66,22 @@ class UPIMAPI:
         diamond_args.add_argument("-db", "--database", default=None,
                                   help="""Reference database for annotation with DIAMOND. NOTICE: if database's IDs are 
                                   in 'full' format (tr|XXX|XXX), specify with ""--full-id" parameter.""")
-        diamond_args.add_argument("-t", "--threads", default=multiprocessing.cpu_count() - 2,
-                                  help="Number of threads to use in annotation steps")
-        diamond_args.add_argument("-mts", "--max-target-seqs", default='50',
-                                  help="Number of annotations to output per sequence inputed")
+        diamond_args.add_argument("-t", "--threads", type=int, default=multiprocessing.cpu_count() - 2,
+                                  help="Number of threads to use in annotation steps (default: total available - 2")
+        diamond_args.add_argument("--evalue", type=float, default=1e-3,
+                                  help="Maximum e-value to report annotations for (default: 0.001).")
+        diamond_args.add_argument("--pident", type=float, default=None,
+                                  help="Minimum pident to report annotations for.")
+        diamond_args.add_argument("--bitscore", type=float, default=None,
+                                  help="Minimum bit score to report annotations for (overrides e-value).")
+        diamond_args.add_argument("-mts", "--max-target-seqs", default=1,
+                                  help="Number of annotations to output per sequence inputed (default: 1)")
         diamond_args.add_argument("-b", "--block-size",
-                                  help="Billions of sequence letters to be processed at a time (UPIMAPI determines best "
-                                       "value for this parameter if not set")
+                                  help="Billions of sequence letters to be processed at a time "
+                                       "(default: auto determine best value)")
         diamond_args.add_argument("-c", "--index-chunks",
-                                  help="Number of chunks for processing the seed index (UPIMAPI determines best value "
-                                       "for this parameter if not set")
+                                  help="Number of chunks for processing the seed index "
+                                       "(default: auto determine best value)")
 
         args = parser.parse_args()
         args._output = args.output.rstrip('/')
@@ -332,10 +338,16 @@ class UPIMAPI:
             return b, 3
         return b, 4
 
-    def run_diamond(self, query, aligned, unaligned, database, threads='12', max_target_seqs='50', b=1, c=4):
-        self.run_command("diamond blastp --query {} --out {} --un {} --db {} --outfmt 6 --unal 1 --threads {} "
-                         "--max-target-seqs {} -b {} -c {}".format(query, aligned, unaligned, database, threads,
-                                                                   max_target_seqs, b, c))
+    def run_diamond(self, query, aligned, unaligned, database, threads=12, max_target_seqs=50, b=1, c=4, e_value=0.01,
+                    bit_score=None, pident=None):
+        command = (
+            f"diamond blastp --query {query} --out {aligned} --un {unaligned} --db {database} --outfmt 6 --unal 1 "
+            f"--threads {threads} --max-target-seqs {max_target_seqs} -b {b} -c {c} --evalue {e_value}")
+        if bit_score:
+            command += f' --min-score {bit_score}'
+        if pident:
+            command += f' --id {pident}'
+        self.run_command(command)
 
     def upimapi(self):
         args = self.get_arguments()
@@ -349,7 +361,8 @@ class UPIMAPI:
             (b, c) = self.b_n_c(argsb=args.block_size, argsc=args.index_chunks)
             self.run_diamond(
                 args.input, '{}/aligned.blast'.format(args.output), '{}/unaligned.blast'.format(args.output),
-                args.database, threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c)
+                args.database, threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c,
+                e_value=args.evalue, bit_score=args.bitscore, pident=args.pident)
             args.input = '{}/aligned.blast'.format(args.output)
             args.blast = True
 
@@ -372,7 +385,7 @@ class UPIMAPI:
 
             self.recursive_uniprot_information(
                 ids, '{}/uniprotinfo.tsv'.format(args.output),
-                columns=columns, databases=databases, step=int(args.step), max_iter=args.max_tries)
+                columns=columns, databases=databases, step=args.step, max_iter=args.max_tries)
 
             if args.use_diamond:
                 blast = self.parse_blast('{}/aligned.blast'.format(args
@@ -382,7 +395,7 @@ class UPIMAPI:
                 pd.merge(blast, pd.read_csv('{}/uniprotinfo.tsv'.format(args.output), sep='\t'), left_on='sseqid',
                          right_on='Entry').to_excel('{}/UPIMAPI_results.xlsx'.format(args.output), index=False)
         else:
-            self.recursive_uniprot_fasta(ids, '{}/uniprotinfo.fasta'.format(args.output), step=int(args.step))
+            self.recursive_uniprot_fasta(ids, '{}/uniprotinfo.fasta'.format(args.output), step=args.step)
 
 
 if __name__ == '__main__':
