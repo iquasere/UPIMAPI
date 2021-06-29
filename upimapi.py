@@ -264,7 +264,7 @@ class UPIMAPI:
             result = pd.DataFrame()
             ids_done = list()
         tries = 0
-        ids_unmapped_output = f"{'/'.join(output.split('/'))}/ids_unmapped.txt"
+        ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
         ids_missing = list(set(ids) - set(ids_done))
         last_ids_missing = None
 
@@ -273,7 +273,7 @@ class UPIMAPI:
 
         while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
             print(f'Information already gathered for {str(len(ids_done))} ids. '
-                  f'Still missing for {str(len(ids_missing))}')
+                  f'Still missing for {str(len(ids_missing))}.')
             last_ids_missing = ids_missing
             uniprotinfo = self.get_uniprot_information(ids_missing, step=step,
                                                        columns=columns, databases=databases, max_tries=max_iter)
