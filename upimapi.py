@@ -24,7 +24,7 @@ from progressbar import ProgressBar
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.2.1'
+__version__ = '1.2.2'
 
 upmap = UniprotSupport()
 
@@ -189,7 +189,7 @@ class UPIMAPI:
                     time.sleep(sleep)
                     done = True
                 except:
-                    print('ID mapping failed. Remaining tries: {}'.format(max_tries - tries))
+                    print(f'ID mapping failed. Remaining tries: {max_tries - tries}')
                     tries += 1
                     time.sleep(10)
         return result
@@ -233,49 +233,47 @@ class UPIMAPI:
             print('Checking which IDs are missing information.')
             pbar = ProgressBar()
             ids_missing = list(set([ide for ide in pbar(all_ids) if ide not in ids_done]))
-            print('Information already gathered for {} ids. Still missing for {}.'.format(len(ids_done),
-                                                                                          len(ids_missing)))
+            print(f'Information already gathered for {len(ids_done)} ids. Still missing for {len(ids_missing)}.')
             uniprotinfo = self.get_uniprot_fasta(ids_missing, step=step)
             with open(output, 'a') as file:
                 file.write(uniprotinfo)
             ids_done = [ide.split('|')[1] for ide in self.parse_fasta(output).keys()]
             tries += 1
         if len(ids_done) == len(all_ids):
-            print('Results for all IDs are available at ' + output)
+            print(f'Results for all IDs are available at {output}')
         else:
-            ids_unmapped_output = '/'.join(output.split('/')[:-1]) + '/ids_unmapped.txt'
+            ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
             handler = open(ids_unmapped_output, 'a')
             handler.write('\n'.join(ids_missing))
-            print('Maximum iterations were made. Results related to {} IDs were not obtained. IDs with missing '
-                  'information are available at {} and information obtained is available at {}'.format(
-                    str(len(ids_missing)), ids_unmapped_output, output))
+            print(f'Maximum iterations were made. Results related to {str(len(ids_missing))} IDs were not obtained. '
+                  f'IDs with missing information are available at {ids_unmapped_output} and information obtained is '
+                  f'available at {output}')
 
     def recursive_uniprot_information(self, ids, output, max_iter=5, columns=list(), databases=list(), step=1000):
         if os.path.isfile(output) and os.stat(output).st_size > 1:
             try:
                 result = pd.read_csv(output, sep='\t', low_memory=False).drop_duplicates()
-                print(output + ' was found. Will perform mapping for the remaining IDs.')
+                print(f'{output} was found. Will perform mapping for the remaining IDs.')
                 ids_done = list(set(result['Entry'].tolist() + result['Entry name'].tolist()))
             except:
-                print(output + ' was found. However, it could not be parsed. Will restart mapping.')
+                print(f'{output} was found. However, it could not be parsed. Will restart mapping.')
                 result = pd.DataFrame()
                 ids_done = list()
         else:
-            print(output + ' not found or empty. Will perform mapping for all IDs.')
+            print(f'{output} not found or empty. Will perform mapping for all IDs.')
             result = pd.DataFrame()
             ids_done = list()
         tries = 0
-        ids_unmapped_output = '{}{}ids_unmapped.txt'.format('/'.join(output.split('/')[:-1]),
-                                                            '/' if '/' in output else '')
+        ids_unmapped_output = f"{'/'.join(output.split('/'))}/ids_unmapped.txt"
         ids_missing = list(set(ids) - set(ids_done))
         last_ids_missing = None
 
-        print('IDs present in uniprotinfo file: ' + str(len(ids_done)))
-        print('IDs missing: ' + str(len(ids_missing)))
+        print(f'IDs present in uniprotinfo file: {str(len(ids_done))}')
+        print(f'IDs missing: {str(len(ids_missing))}')
 
         while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
-            print('Information already gathered for {} ids. Still missing for {}.'.format(
-                str(len(ids_done)), str(len(ids_missing))))
+            print(f'Information already gathered for {str(len(ids_done))} ids. '
+                  f'Still missing for {str(len(ids_missing))}')
             last_ids_missing = ids_missing
             uniprotinfo = self.get_uniprot_information(ids_missing, step=step,
                                                        columns=columns, databases=databases, max_tries=max_iter)
@@ -295,12 +293,12 @@ class UPIMAPI:
         result.to_csv(output, sep='\t', index=False)
 
         if len(ids_missing) == 0:
-            print('Results for all IDs are available at ' + output)
+            print(f'Results for all IDs are available at {output}')
         else:
             open(ids_unmapped_output, 'a').write('\n'.join(ids_missing))
-            print("Maximum iterations were made. Results related to {} IDs were not obtained. IDs with missing "
-                  "information are available at {} and information obtained is available at {}".format(
-                    str(len(ids_missing)), ids_unmapped_output, output))
+            print(f"Maximum iterations were made. Results related to {str(len(ids_missing))} IDs were not obtained. "
+                  f"IDs with missing information are available at {ids_unmapped_output} and information obtained is "
+                  f"available at {output}")
 
 
     def get_ids(self, inpute, input_type='blast', full_id=False):
@@ -321,7 +319,7 @@ class UPIMAPI:
         subprocess.run(bash_command.split(), check=True)
 
     def generate_diamond_database(self, fasta, dmnd):
-        self.run_command('diamond makedb --in {} -d {}'.format(fasta, dmnd))
+        self.run_command(f'diamond makedb --in {fasta} -d {dmnd}')
 
     def b_n_c(self, argsb, argsc):
         if argsb is not None:
@@ -356,14 +354,14 @@ class UPIMAPI:
         # Using annotation with DIAMOND
         if args.use_diamond:
             if not args.database.endswith(".dmnd"):
-                self.generate_diamond_database(args.database, '{}.dmnd'.format('.'.join(args.database.split('.')[:-1])))
-                args.database = '{}.dmnd'.format('.'.join(args.database.split('.')[:-1]))
+                self.generate_diamond_database(args.database, f"{'.'.join(args.database.split('.')[:-1])}.dmnd")
+                args.database = f"{'.'.join(args.database.split('.')[:-1])}.dmnd"
             (b, c) = self.b_n_c(argsb=args.block_size, argsc=args.index_chunks)
             self.run_diamond(
-                args.input, '{}/aligned.blast'.format(args.output), '{}/unaligned.blast'.format(args.output),
+                args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast',
                 args.database, threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c,
                 e_value=args.evalue, bit_score=args.bitscore, pident=args.pident)
-            args.input = '{}/aligned.blast'.format(args.output)
+            args.input = f'{args.output}/aligned.blast'
             args.blast = True
 
         # Get IDs from STDIN and set input type
@@ -384,21 +382,22 @@ class UPIMAPI:
             databases = args.annotation_databases.split('&') if args.annotation_databases != '' else list()
 
             self.recursive_uniprot_information(
-                ids, '{}/uniprotinfo.tsv'.format(args.output),
+                ids, f'{args.output}/uniprotinfo.tsv',
                 columns=columns, databases=databases, step=args.step, max_iter=args.max_tries)
 
             if args.use_diamond:
-                blast = self.parse_blast('{}/aligned.blast'.format(args
-                                                                   .output))
+                blast = self.parse_blast(f'{args.output}/aligned.blast')
                 if args.full_id:
                     blast.sseqid = [ide.split('|')[1] if ide != '*' else ide for ide in blast.sseqid]
-                pd.merge(blast, pd.read_csv('{}/uniprotinfo.tsv'.format(args.output), sep='\t'), left_on='sseqid',
-                         right_on='Entry').to_excel('{}/UPIMAPI_results.xlsx'.format(args.output), index=False)
+                result = pd.merge(blast, pd.read_csv(f'{args.output}/uniprotinfo.tsv', sep='\t'), left_on='sseqid',
+                         right_on='Entry')
+                result.to_excel(f'{args.output}/UPIMAPI_results.xlsx', index=False)
+                result.to_csv(f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
         else:
-            self.recursive_uniprot_fasta(ids, '{}/uniprotinfo.fasta'.format(args.output), step=args.step)
+            self.recursive_uniprot_fasta(ids, f'{args.output}/uniprotinfo.fasta', step=args.step)
 
 
 if __name__ == '__main__':
     start_time = time.time()
     UPIMAPI().upimapi()
-    print('UPIMAPI analysis finished in {}'.format(time.strftime("%Hh%Mm%Ss", time.gmtime(time.time() - start_time))))
+    print(f'UPIMAPI analysis finished in {time.strftime("%Hh%Mm%Ss", time.gmtime(time.time() - start_time))}')
