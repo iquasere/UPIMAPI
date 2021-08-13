@@ -20,11 +20,11 @@ import multiprocessing
 from io import StringIO
 
 import pandas as pd
-from progressbar import ProgressBar
+from tqdm import tqdm
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.2.2'
+__version__ = '1.3.0'
 
 upmap = UniprotSupport()
 
@@ -43,13 +43,16 @@ class UPIMAPI:
                                 3. a protein FASTA file to be annotated (requires the --use-diamond and -db parameters)
                                 4. nothing! If so, will read input from command line, and parse as CSV (id1,id2,...)""")
         parser.add_argument("-o", "--output", help="Folder to store outputs", default="UPIMAPI_output")
+        parser.add_argument("-ot", "--output-table",
+                            help="Filename of table output, where UniProt info is stored. If set, will override "
+                                 "'output' parameter just for that specific file")
         parser.add_argument("-anncols", "--annotation-columns", default='',
                             help="List of UniProt columns to obtain information from (separated by &)")
         parser.add_argument("-anndbs", "--annotation-databases", default='',
                             help="List of databases to cross-check with UniProt information (separated by &)")
         parser.add_argument("--blast", action="store_true", default=False,
                             help="If input file is in BLAST TSV format (will consider one ID per line if not set)")
-        parser.add_argument("--full-id", action="store_true", default=False,
+        parser.add_argument("--full-id", type=self.str2bool, default="auto",
                             help="If IDs in database are in 'full' format: tr|XXX|XXX")
         parser.add_argument("--fasta", help="Output will be generated in FASTA format",
                             action="store_true", default=False)
@@ -84,9 +87,19 @@ class UPIMAPI:
                                        "(default: auto determine best value)")
 
         args = parser.parse_args()
-        args._output = args.output.rstrip('/')
+        args.output = args.output.rstrip('/')
 
         return args
+
+    def str2bool(self, v):
+        if v.lower() == 'auto':
+            return 'auto'
+        elif v.lower() in ('yes', 'true', 't', 'y', '1'):
+            return True
+        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+            return False
+        else:
+            raise argparse.ArgumentTypeError('Boolean value expected.')
 
     '''
     Input:
@@ -115,6 +128,7 @@ class UPIMAPI:
     Output:
         pandas.DataFrame
     '''
+
     def parse_blast(self, blast):
         result = pd.read_csv(blast, sep='\t', header=None)
         result.columns = ['qseqid', 'sseqid', 'pident', 'length', 'mismatch',
@@ -133,6 +147,7 @@ class UPIMAPI:
     Output:
         Returns the content of the response from UniProt
     '''
+
     def uniprot_request(self, ids, original_database='ACC+ID', database_destination='',
                         output_format='tab', columns=list(), databases=list()):
         base_url = 'https://www.uniprot.org/uploadlists/'
@@ -164,13 +179,13 @@ class UPIMAPI:
     Output:
         pd.DataFrame will be returned with the information about the IDs queried.
     '''
+
     def get_uniprot_information(self, ids, original_database='ACC+ID',
                                 database_destination='', step=1000, sleep=30,
                                 columns=list(), databases=list(), max_tries=3):
-        pbar = ProgressBar()
         print('Retrieving UniProt information from ' + str(len(ids)) + ' IDs.')
         result = pd.DataFrame()
-        for i in pbar(range(0, len(ids), step)):
+        for i in tqdm(range(0, len(ids), step), desc="UniProt ID mapping"):
             tries = 0
             done = False
             j = min(i + step, len(ids))
@@ -203,11 +218,11 @@ class UPIMAPI:
         str object containing the fasta sequences and headers
         of the proteis belonging to the IDs queried will be returned
     '''
+
     def get_uniprot_fasta(self, ids, step=1000, sleep=30):
-        pbar = ProgressBar()
-        print('Building FASTA from ' + str(len(ids)) + ' IDs.')
+        print(f'Building FASTA from {len(ids)} IDs.')
         result = str()
-        for i in pbar(range(0, len(ids), step)):
+        for i in tqdm(range(0, len(ids), step), desc="UniProt ID mapping"):
             j = min(i + step, len(ids))
             data = self.uniprot_request(ids[i:j], original_database='ACC+ID',
                                         database_destination='', output_format='fasta')
@@ -218,10 +233,10 @@ class UPIMAPI:
 
     def recursive_uniprot_fasta(self, all_ids, output, max_iter=5, step=1000):
         if os.path.isfile(output):
-            print(output + ' was found. Will perform mapping for the remaining IDs.')
+            print(f'{output} was found. Will perform mapping for the remaining IDs.')
             ids_done = self.parse_fasta(output).keys()
         else:
-            print(output + ' not found. Will perform mapping for all IDs.')
+            print(f'{output} not found. Will perform mapping for all IDs.')
             ids_done = list()
 
         ids_missing = list(set(all_ids) - set(ids_done))
@@ -231,8 +246,8 @@ class UPIMAPI:
                     if os.path.isfile(output) else list())
         while len(ids_done) < len(all_ids) and tries < max_iter:
             print('Checking which IDs are missing information.')
-            pbar = ProgressBar()
-            ids_missing = list(set([ide for ide in pbar(all_ids) if ide not in ids_done]))
+            ids_missing = list(set([ide for ide in tqdm(all_ids, desc='Checking which IDs are missing information.')
+                                    if ide not in ids_done]))
             print(f'Information already gathered for {len(ids_done)} ids. Still missing for {len(ids_missing)}.')
             uniprotinfo = self.get_uniprot_fasta(ids_missing, step=step)
             with open(output, 'a') as file:
@@ -300,18 +315,25 @@ class UPIMAPI:
                   f"IDs with missing information are available at {ids_unmapped_output} and information obtained is "
                   f"available at {output}")
 
+    def determine_full_id(self, ids):
+        for ide in ids:
+            if '|' in ide:
+                return True
+        return False
 
-    def get_ids(self, inpute, input_type='blast', full_id=False):
+    def get_ids(self, inpute, input_type='blast', full_id='auto'):
         if input_type == 'blast':
             ids = self.parse_blast(inpute)['sseqid']
-            ids = [ide for ide in ids if ide != '*']  # removes the non identified
         elif input_type == 'txt':
             ids = open(inpute).read().split('\n')
         else:
             ids = inpute.split(',')
+        if full_id == 'auto':
+            full_id = self.determine_full_id(ids)
+            print(f'Auto determined "full id" as: {full_id}')
         if full_id:
-            return [ide.split('|')[1] for ide in ids]
-        return ids
+            return [ide.split('|')[1] for ide in ids if ide != '*'], full_id
+        return [ide for ide in ids if ide != '*'], full_id
 
     def run_command(self, bash_command, print_message=True):
         if print_message:
@@ -325,7 +347,7 @@ class UPIMAPI:
         if argsb is not None:
             b = argsb
         else:
-            b = psutil.virtual_memory().available / (1024.0 ** 3) / 20      # b = memory in Gb / 20
+            b = psutil.virtual_memory().available / (1024.0 ** 3) / 20  # b = memory in Gb / 20
         if argsc is not None:
             return b, argsc
         if b > 3:
@@ -374,23 +396,27 @@ class UPIMAPI:
             input_type = 'txt'
 
         # Get the IDs
-        ids = self.get_ids(args.input, input_type=input_type, full_id=args.full_id)
+        ids, full_id = self.get_ids(args.input, input_type=input_type, full_id=args.full_id)
 
         # Get UniProt information
         if not args.fasta:
             columns = args.annotation_columns.split('&') if args.annotation_columns != '' else list()
             databases = args.annotation_databases.split('&') if args.annotation_databases != '' else list()
 
+            if hasattr(args, "output_table"):
+                table_output = args.output_table
+                pathlib.Path('/'.join(args.output_table.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
+            else:
+                table_output = f'{args.output}/uniprotinfo.tsv'
+            print(f'Overrided table output to {table_output}')
             self.recursive_uniprot_information(
-                ids, f'{args.output}/uniprotinfo.tsv',
-                columns=columns, databases=databases, step=args.step, max_iter=args.max_tries)
+                ids, table_output, columns=columns, databases=databases, step=args.step, max_iter=args.max_tries)
 
             if args.use_diamond:
                 blast = self.parse_blast(f'{args.output}/aligned.blast')
-                if args.full_id:
+                if full_id:
                     blast.sseqid = [ide.split('|')[1] if ide != '*' else ide for ide in blast.sseqid]
-                result = pd.merge(blast, pd.read_csv(f'{args.output}/uniprotinfo.tsv', sep='\t'), left_on='sseqid',
-                         right_on='Entry')
+                result = pd.merge(blast, pd.read_csv(table_output, sep='\t'), left_on='sseqid', right_on='Entry')
                 result.to_excel(f'{args.output}/UPIMAPI_results.xlsx', index=False)
                 result.to_csv(f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
         else:
