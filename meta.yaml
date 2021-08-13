@@ -17,12 +17,12 @@ build:
 
 requirements:
   run:
-    - progressbar
     - pandas
     - openpyxl
     - xlrd
     - diamond
     - psutil
+    - tqdm
 
 test:
   commands:

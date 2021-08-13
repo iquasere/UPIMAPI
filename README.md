@@ -20,19 +20,6 @@ upimapi.py --version
 
 UPIMAPI can be used to first perform annotation with DIAMOND, or directly inputing UniProt IDs to it.
 
-### Running DIAMOND first
-
-To run DIAMOND, the argument ```--use-diamond``` must be specified, and the input most come in FASTA protein format (.faa).
-The reference database for aligning the query sequences must be specified with the ```--database``` argument. 
-Optionally, parameters for ```--threads```, ```--block-size``` and ```--index-chunks``` can also be specified to speed DIAMOND annotation. 
-If not specified, UPIMAPI will automatically determine best values for each of them.
-
-### Outputs
-
-Information obtained with UPIMAPI can come in two forms:
-* the base (default) workflow obtains information for the list of columns and databases inputted
-* the "fasta" workflow, specified with the ```--fasta``` argument, results in a FASTA file with the protein sequences correspondent to the inputted IDs
-
 ### Example commands
 
 Get (default) columns and databases information from a list of ids (one per line): will produce uniprotinfo.tsv in ```output_directory```
@@ -54,6 +41,13 @@ Annotate FASTA protein sequences (.faa) and get information in EXCEL format. Wil
 ```
 upimapi.py -i sequences.fasta -o output_directory --use-diamond -db path/to/database.fasta
 ```
+
+### Running DIAMOND first
+
+To run DIAMOND, the argument ```--use-diamond``` must be specified, and the input most come in FASTA protein format (.faa).
+The reference database for aligning the query sequences must be specified with the ```--database``` argument. 
+Optionally, parameters for ```--threads```, ```--block-size``` and ```--index-chunks``` can also be specified to speed DIAMOND annotation. 
+If not specified, UPIMAPI will automatically determine best values for each of them.
 
 ## Additional parameters
 
@@ -108,3 +102,9 @@ DIAMOND arguments:
                         (UPIMAPI determines best value for this parameter if
                         not set
 ```
+
+### Outputs
+
+Information obtained with UPIMAPI can come in two forms:
+* the base (default) workflow obtains information for the list of columns and databases inputted
+* the "fasta" workflow, specified with the ```--fasta``` argument, results in a FASTA file with the protein sequences correspondent to the inputted IDs
