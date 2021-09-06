@@ -319,7 +319,7 @@ class UPIMAPI:
     def generate_diamond_database(self, fasta, dmnd):
         self.run_command(f'diamond makedb --in {fasta} -d {dmnd}')
 
-    def b_n_c(self, argsb, argsc):
+    def block_size_and_index_chunks(self, argsb, argsc):
         if argsb:
             b = argsb
         else:
@@ -355,7 +355,7 @@ class UPIMAPI:
             if not args.database.endswith(".dmnd"):
                 self.generate_diamond_database(args.database, f"{'.'.join(args.database.split('.')[:-1])}.dmnd")
                 args.database = f"{'.'.join(args.database.split('.')[:-1])}.dmnd"
-            (b, c) = self.b_n_c(argsb=args.block_size, argsc=args.index_chunks)
+            (b, c) = self.block_size_and_index_chunks(argsb=args.block_size, argsc=args.index_chunks)
             self.run_diamond(
                 args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast',
                 args.database, threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c,
