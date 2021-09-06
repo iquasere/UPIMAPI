@@ -240,7 +240,7 @@ class UPIMAPI:
                   f'available at {output}')
 
     def uniprot_information_workflow(self, ids, output, max_iter=5, columns=list(), databases=list(), step=1000,
-                                      sleep_time=10):
+                                     sleep_time=10):
         if os.path.isfile(output) and os.stat(output).st_size > 1:
             try:
                 result = pd.read_csv(output, sep='\t', low_memory=False).drop_duplicates()
@@ -395,7 +395,6 @@ class UPIMAPI:
                 if full_id:
                     blast.sseqid = [ide.split('|')[1] if ide != '*' else ide for ide in blast.sseqid]
                 result = pd.merge(blast, pd.read_csv(table_output, sep='\t'), left_on='sseqid', right_on='Entry')
-                result.to_excel(f'{args.output}/UPIMAPI_results.xlsx', index=False)
                 result.to_csv(f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
         else:
             self.uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
