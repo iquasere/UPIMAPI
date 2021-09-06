@@ -48,7 +48,7 @@ class UPIMAPI:
                                  "'output' parameter just for that specific file")
         parser.add_argument("-cols", "--columns", default='',
                             help="List of UniProt columns to obtain information from (separated by &)")
-        parser.add_argument("-dbs", "--annotation-databases", default='',
+        parser.add_argument("-dbs", "--databases", default='',
                             help="List of databases to cross-check with UniProt information (separated by &)")
         parser.add_argument("--blast", action="store_true", default=False,
                             help="If input file is in BLAST TSV format (will consider one ID per line if not set)")
@@ -218,8 +218,7 @@ class UPIMAPI:
         ids_missing = list(set(all_ids) - set(ids_done))
 
         tries = 0
-        ids_done = ([ide.split('|')[1] for ide in self.get_fasta_ids(output)]
-                    if os.path.isfile(output) else list())
+        ids_done = ([ide.split('|')[1] for ide in self.get_fasta_ids(output)] if os.path.isfile(output) else list())
         while len(ids_done) < len(all_ids) and tries < max_iter:
             print('Checking which IDs are missing information.')
             ids_missing = list(set([ide for ide in tqdm(all_ids, desc='Checking which IDs are missing information.')
@@ -381,7 +380,7 @@ class UPIMAPI:
             columns = args.columns.split('&') if args.columns != '' else list()
             databases = args.databases.split('&') if args.databases != '' else list()
 
-            if hasattr(args, "output_table"):
+            if args.output_table:
                 table_output = args.output_table
                 pathlib.Path('/'.join(args.output_table.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
             else:
