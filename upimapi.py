@@ -9,7 +9,7 @@ Mar 2020
 
 import argparse
 import os
-import time
+from time import strftime, gmtime, time, sleep
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.3.0'
+__version__ = '1.4.0'
 
 upmap = UniprotSupport()
 
@@ -46,20 +46,21 @@ class UPIMAPI:
         parser.add_argument("-ot", "--output-table",
                             help="Filename of table output, where UniProt info is stored. If set, will override "
                                  "'output' parameter just for that specific file")
-        parser.add_argument("-anncols", "--annotation-columns", default='',
+        parser.add_argument("-cols", "--columns", default='',
                             help="List of UniProt columns to obtain information from (separated by &)")
-        parser.add_argument("-anndbs", "--annotation-databases", default='',
+        parser.add_argument("-dbs", "--annotation-databases", default='',
                             help="List of databases to cross-check with UniProt information (separated by &)")
         parser.add_argument("--blast", action="store_true", default=False,
                             help="If input file is in BLAST TSV format (will consider one ID per line if not set)")
         parser.add_argument("--full-id", type=self.str2bool, default="auto",
                             help="If IDs in database are in 'full' format: tr|XXX|XXX")
-        parser.add_argument("--fasta", help="Output will be generated in FASTA format",
-                            action="store_true", default=False)
+        parser.add_argument("--fasta", help="Output will be generated in FASTA format", action="store_true",
+                            default=False)
         parser.add_argument("--step", type=int, default=1000,
-                            help="How many IDs to submit per request to the API (default: 1000)")
+                            help="How many IDs to submit per request to the API [1000]")
         parser.add_argument("--max-tries", default=3, type=int,
                             help="How many times to try obtaining information from UniProt before giving up")
+        parser.add_argument("--sleep", default=10, type=int, help="Time between requests (in seconds) [10]")
         parser.add_argument('-v', '--version', action='version', version=f'UPIMAPI {__version__}')
 
         diamond_args = parser.add_argument_group('DIAMOND arguments')
@@ -70,15 +71,15 @@ class UPIMAPI:
                                   help="""Reference database for annotation with DIAMOND. NOTICE: if database's IDs are 
                                   in 'full' format (tr|XXX|XXX), specify with ""--full-id" parameter.""")
         diamond_args.add_argument("-t", "--threads", type=int, default=multiprocessing.cpu_count() - 2,
-                                  help="Number of threads to use in annotation steps (default: total available - 2")
+                                  help="Number of threads to use in annotation steps [total - 2]")
         diamond_args.add_argument("--evalue", type=float, default=1e-3,
-                                  help="Maximum e-value to report annotations for (default: 0.001).")
+                                  help="Maximum e-value to report annotations for [1e-3]")
         diamond_args.add_argument("--pident", type=float, default=None,
                                   help="Minimum pident to report annotations for.")
         diamond_args.add_argument("--bitscore", type=float, default=None,
                                   help="Minimum bit score to report annotations for (overrides e-value).")
         diamond_args.add_argument("-mts", "--max-target-seqs", default=1,
-                                  help="Number of annotations to output per sequence inputed (default: 1)")
+                                  help="Number of annotations to output per sequence inputed [1]")
         diamond_args.add_argument("-b", "--block-size",
                                   help="Billions of sequence letters to be processed at a time "
                                        "(default: auto determine best value)")
@@ -101,33 +102,8 @@ class UPIMAPI:
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
 
-    '''
-    Input:
-        filename: str - FASTA filename
-    Output:
-        dict {header : sequence}
-    '''
-
-    def parse_fasta(self, filename):
-        lines = [line.rstrip('\n') for line in open(filename)]
-        i = 0
-        sequences = dict()
-        while i < len(lines):
-            if lines[i].startswith('>'):
-                name = lines[i][1:]
-                sequences[name] = ''
-                i += 1
-                while i < len(lines) and not lines[i].startswith('>'):
-                    sequences[name] += lines[i]
-                    i += 1
-        return sequences
-
-    '''
-    Input:
-        filename: str - BLAST filename
-    Output:
-        pandas.DataFrame
-    '''
+    def get_fasta_ids(self, filename):
+        return [line[1:-1] for line in open(filename) if line.startswith('>')]
 
     def parse_blast(self, blast):
         result = pd.read_csv(blast, sep='\t', header=None)
@@ -136,20 +112,20 @@ class UPIMAPI:
                           'evalue', 'bitscore']
         return result
 
-    '''
-    Input:
-        ids: list of UniProt IDs to query
-        original_database: database from where the IDs are
-        database_destination: database to where to map (so far, only works with 'ACC'
-        output_format: format of response to get
-        columns: names of UniProt columns to get info on
-        databases: names of databases to cross-reference with
-    Output:
-        Returns the content of the response from UniProt
-    '''
-
     def uniprot_request(self, ids, original_database='ACC+ID', database_destination='',
                         output_format='tab', columns=list(), databases=list()):
+        """
+        Input:
+            ids: list of UniProt IDs to query
+            original_database: database from where the IDs are
+            database_destination: database to where to map (so far, only works with 'ACC'
+            output_format: format of response to get
+            columns: names of UniProt columns to get info on
+            databases: names of databases to cross-reference with
+        Output:
+            Returns the content of the response from UniProt
+        """
+
         base_url = 'https://www.uniprot.org/uploadlists/'
 
         params = {
@@ -167,22 +143,22 @@ class UPIMAPI:
         response = urllib.request.urlopen(request)
         return response.read().decode("utf-8")
 
-    '''
-    Input:
-        ids: list of UniProt IDs to query
-        original_database: database from where the IDs are
-        database_destination: database to where to map (so far, only works with 'ACC'
-        chunk: INT, number of IDs to send per request
-        sleep: INT, number of seconds to wait between requests
-        columns: list - names of UniProt columns to get info on
-        databases: list - names of databases to cross-reference with
-    Output:
-        pd.DataFrame will be returned with the information about the IDs queried.
-    '''
-
     def get_uniprot_information(self, ids, original_database='ACC+ID',
-                                database_destination='', step=1000, sleep=30,
+                                database_destination='', step=1000, sleep_time=30,
                                 columns=list(), databases=list(), max_tries=3):
+        """
+        Input:
+            ids: list of UniProt IDs to query
+            original_database: database from where the IDs are
+            database_destination: database to where to map (so far, only works with 'ACC'
+            chunk: INT, number of IDs to send per request
+            sleep_time: INT, number of seconds to wait between requests
+            columns: list - names of UniProt columns to get info on
+            databases: list - names of databases to cross-reference with
+        Output:
+            pd.DataFrame will be returned with the information about the IDs queried.
+        """
+
         print('Retrieving UniProt information from ' + str(len(ids)) + ' IDs.')
         result = pd.DataFrame()
         for i in tqdm(range(0, len(ids), step), desc="UniProt ID mapping"):
@@ -201,25 +177,25 @@ class UPIMAPI:
                         ) else (len(columns) + len(databases))))  # Removes the "yourlist:" and "isomap:" columns
                         uniprotinfo = uniprotinfo[uniprotinfo.columns.tolist()[:-k]]
                         result = pd.concat([result, uniprotinfo[uniprotinfo.columns.tolist()]])
-                    time.sleep(sleep)
+                    sleep(sleep_time)
                     done = True
                 except:
                     print(f'ID mapping failed. Remaining tries: {max_tries - tries}')
                     tries += 1
-                    time.sleep(10)
+                    sleep(10)
         return result
 
-    '''
-    Input:
-        ids: list of UniProt IDs to query
-        chunk: INT, number of IDs to send per request
-        sleep: INT, number of seconds to wait between requests
-    Output:
-        str object containing the fasta sequences and headers
-        of the proteis belonging to the IDs queried will be returned
-    '''
+    def get_uniprot_fasta(self, ids, step=1000, sleep_time=30):
+        """
+        Input:
+            ids: list of UniProt IDs to query
+            chunk: INT, number of IDs to send per request
+            sleep_time: INT, number of seconds to wait between requests
+        Output:
+            str object containing the fasta sequences and headers
+            of the proteis belonging to the IDs queried will be returned
+        """
 
-    def get_uniprot_fasta(self, ids, step=1000, sleep=30):
         print(f'Building FASTA from {len(ids)} IDs.')
         result = str()
         for i in tqdm(range(0, len(ids), step), desc="UniProt ID mapping"):
@@ -228,13 +204,13 @@ class UPIMAPI:
                                         database_destination='', output_format='fasta')
             if len(data) > 0:
                 result += data
-            time.sleep(sleep)
+            sleep(sleep_time)
         return result
 
-    def recursive_uniprot_fasta(self, all_ids, output, max_iter=5, step=1000):
+    def uniprot_fasta_workflow(self, all_ids, output, max_iter=5, step=1000, sleep_time=10):
         if os.path.isfile(output):
             print(f'{output} was found. Will perform mapping for the remaining IDs.')
-            ids_done = self.parse_fasta(output).keys()
+            ids_done = self.get_fasta_ids(output)
         else:
             print(f'{output} not found. Will perform mapping for all IDs.')
             ids_done = list()
@@ -242,17 +218,17 @@ class UPIMAPI:
         ids_missing = list(set(all_ids) - set(ids_done))
 
         tries = 0
-        ids_done = ([ide.split('|')[1] for ide in self.parse_fasta(output).keys()]
+        ids_done = ([ide.split('|')[1] for ide in self.get_fasta_ids(output)]
                     if os.path.isfile(output) else list())
         while len(ids_done) < len(all_ids) and tries < max_iter:
             print('Checking which IDs are missing information.')
             ids_missing = list(set([ide for ide in tqdm(all_ids, desc='Checking which IDs are missing information.')
                                     if ide not in ids_done]))
             print(f'Information already gathered for {len(ids_done)} ids. Still missing for {len(ids_missing)}.')
-            uniprotinfo = self.get_uniprot_fasta(ids_missing, step=step)
+            uniprotinfo = self.get_uniprot_fasta(ids_missing, step=step, sleep_time=sleep_time)
             with open(output, 'a') as file:
                 file.write(uniprotinfo)
-            ids_done = [ide.split('|')[1] for ide in self.parse_fasta(output).keys()]
+            ids_done = [ide.split('|')[1] for ide in self.get_fasta_ids(output)]
             tries += 1
         if len(ids_done) == len(all_ids):
             print(f'Results for all IDs are available at {output}')
@@ -264,7 +240,8 @@ class UPIMAPI:
                   f'IDs with missing information are available at {ids_unmapped_output} and information obtained is '
                   f'available at {output}')
 
-    def recursive_uniprot_information(self, ids, output, max_iter=5, columns=list(), databases=list(), step=1000):
+    def uniprot_information_workflow(self, ids, output, max_iter=5, columns=list(), databases=list(), step=1000,
+                                      sleep_time=10):
         if os.path.isfile(output) and os.stat(output).st_size > 1:
             try:
                 result = pd.read_csv(output, sep='\t', low_memory=False).drop_duplicates()
@@ -290,8 +267,8 @@ class UPIMAPI:
             print(f'Information already gathered for {str(len(ids_done))} ids. '
                   f'Still missing for {str(len(ids_missing))}.')
             last_ids_missing = ids_missing
-            uniprotinfo = self.get_uniprot_information(ids_missing, step=step,
-                                                       columns=columns, databases=databases, max_tries=max_iter)
+            uniprotinfo = self.get_uniprot_information(
+                ids_missing, step=step, columns=columns, databases=databases, max_tries=max_iter, sleep_time=sleep_time)
             if len(uniprotinfo) > 0:
                 ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry name'].tolist()))
                 result = pd.concat([result, uniprotinfo], ignore_index=True)
@@ -344,11 +321,11 @@ class UPIMAPI:
         self.run_command(f'diamond makedb --in {fasta} -d {dmnd}')
 
     def b_n_c(self, argsb, argsc):
-        if argsb is not None:
+        if argsb:
             b = argsb
         else:
             b = psutil.virtual_memory().available / (1024.0 ** 3) / 20  # b = memory in Gb / 20
-        if argsc is not None:
+        if argsc:
             return b, argsc
         if b > 3:
             return b, 1
@@ -362,7 +339,8 @@ class UPIMAPI:
                     bit_score=None, pident=None):
         command = (
             f"diamond blastp --query {query} --out {aligned} --un {unaligned} --db {database} --outfmt 6 --unal 1 "
-            f"--threads {threads} --max-target-seqs {max_target_seqs} -b {b} -c {c} --evalue {e_value}")
+            f"--threads {threads} --max-target-seqs {max_target_seqs} -b {b} -c {c} --evalue {e_value} --very-sensitive"
+        )
         if bit_score:
             command += f' --min-score {bit_score}'
         if pident:
@@ -400,8 +378,8 @@ class UPIMAPI:
 
         # Get UniProt information
         if not args.fasta:
-            columns = args.annotation_columns.split('&') if args.annotation_columns != '' else list()
-            databases = args.annotation_databases.split('&') if args.annotation_databases != '' else list()
+            columns = args.columns.split('&') if args.columns != '' else list()
+            databases = args.databases.split('&') if args.databases != '' else list()
 
             if hasattr(args, "output_table"):
                 table_output = args.output_table
@@ -409,8 +387,9 @@ class UPIMAPI:
             else:
                 table_output = f'{args.output}/uniprotinfo.tsv'
             print(f'Overrided table output to {table_output}')
-            self.recursive_uniprot_information(
-                ids, table_output, columns=columns, databases=databases, step=args.step, max_iter=args.max_tries)
+            self.uniprot_information_workflow(
+                ids, table_output, columns=columns, databases=databases, step=args.step, max_iter=args.max_tries,
+                sleep_time=args.sleep)
 
             if args.use_diamond:
                 blast = self.parse_blast(f'{args.output}/aligned.blast')
@@ -420,10 +399,10 @@ class UPIMAPI:
                 result.to_excel(f'{args.output}/UPIMAPI_results.xlsx', index=False)
                 result.to_csv(f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
         else:
-            self.recursive_uniprot_fasta(ids, f'{args.output}/uniprotinfo.fasta', step=args.step)
+            self.uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
 
 
 if __name__ == '__main__':
-    start_time = time.time()
+    start_time = time()
     UPIMAPI().upimapi()
-    print(f'UPIMAPI analysis finished in {time.strftime("%Hh%Mm%Ss", time.gmtime(time.time() - start_time))}')
+    print(f'UPIMAPI analysis finished in {strftime("%Hh%Mm%Ss", gmtime(time() - start_time))}')
