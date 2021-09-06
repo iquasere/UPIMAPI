@@ -24,7 +24,7 @@ from tqdm import tqdm
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.4.0'
+__version__ = '1.4.1'
 
 upmap = UniprotSupport()
 
