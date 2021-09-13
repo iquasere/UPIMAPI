@@ -38,9 +38,23 @@ where:
 #### Reference database
 
 Several points to take notice about the reference database:
-* it must be either UniProt or a subsection of it (e.g. SwissProt, or all proteins of a specific taxon). UPIMAPI performs ID mapping with UniProt IDs, so the database must have those 
-* it must be downloaded manually. UPIMAPI has no automated download option because a different database will be required for each different case
-* it can be supplied in either FASTA (.fasta) or DIAMOND (.dmnd) format. If in FASTA, UPIMAPI will create a new database in DIAMOND format for annotation
+* It must be either UniProt or a subsection of it (e.g. SwissProt, or all proteins of a specific taxon). UPIMAPI performs ID mapping with UniProt IDs, so the database must have those;
+* It can be supplied in either FASTA (.fasta) or DIAMOND (.dmnd) format. If in FASTA, UPIMAPI will create a new database in DIAMOND format for annotation;
+* There are four different ways to input reference databases to UPIMAPI:
+    ##### 1. Use the entire UniProt (or just SwissProt)
+    Using the UniProt database is a valid choice if the case study is a metagenome with a mostly unknown community composition.
+    
+    To use the entire UniProt database as reference for UPIMAPI, specify the database as ```--database uniprot```.
+    
+    If alternatively you only want to use SwissProt (the manually curated part of UniProt), specify the database as ```--database swissprot```.
+    ##### 2. Input tax IDs to build a more specific database
+    If, for both pure and mixed cultures, the taxonomic composition is known, UPIMAPI can build a database with the reference proteomes of the known taxa. 
+    
+    To build a reference for specific taxa, specify the database as ```--database taxids```, and the tax IDs as ```--tax-ids taxid1 taxid2 taxid3 ...```.
+    ##### 3. Input a custom database
+    A custom database can be inputted if, for example, there is only interest in annotating proteins of a specific family (e.g. hydrogenases). Such a database must be manually built from UniProt.
+    
+    To input a custom database into UPIMAPI, specify it as ```--database path/to/database.fasta```.
 
 ## Columns and databases of information from UniProt
 

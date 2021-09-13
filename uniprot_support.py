@@ -398,8 +398,8 @@ class UniprotSupport:
             'Xenopus laevis and tropicalis biology and genomics resource': 'Xenbase',
             'Zebrafish Information Network genome database': 'ZFIN'}
 
-    def string4mapping(self, columns=list(), databases=list()):
-        if len(columns + databases) == 0:   # if no columns or databases are inputted, UPIMAPI uses all
+    def string4mapping(self, columns=None, databases=None):
+        if columns is None and databases is None:   # if no columns or databases are inputted, UPIMAPI uses all
             columns = self.default_columns
             databases = self.default_databases
 
