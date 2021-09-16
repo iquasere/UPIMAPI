@@ -27,7 +27,7 @@ from datetime import datetime
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.5.0'
+__version__ = '1.5.1'
 
 upmap = UniprotSupport()
 
@@ -49,9 +49,9 @@ def get_arguments():
         "-rd", "--resources-directory", default=os.path.expanduser("~/upimapi_resources"),
         help="Directory to store resources of UPIMAPI [~/upimapi_resources]")
     parser.add_argument(
-        "-cols", "--columns", default='', help="List of UniProt columns to obtain information from (separated by &)")
+        "-cols", "--columns", default=None, help="List of UniProt columns to obtain information from (separated by &)")
     parser.add_argument(
-        "-dbs", "--databases", default='',
+        "-dbs", "--databases", default=None,
         help="List of databases to cross-check with UniProt information (separated by &)")
     parser.add_argument(
         "--blast", action="store_true", default=False,
@@ -161,9 +161,9 @@ def uniprot_request(ids, original_database='ACC+ID', database_destination='',
     return response.read().decode("utf-8")
 
 
-def get_uniprot_information(ids, original_database='ACC+ID',
-                            database_destination='', step=1000, sleep_time=30,
-                            columns=None, databases=None, max_tries=3):
+def get_uniprot_information(
+        ids, original_database='ACC+ID', database_destination='', step=1000, sleep_time=30, columns=None,
+        databases=None, max_tries=3):
     """
     Input:
         ids: list of UniProt IDs to query
@@ -176,17 +176,15 @@ def get_uniprot_information(ids, original_database='ACC+ID',
     Output:
         pd.DataFrame will be returned with the information about the IDs queried.
     """
-
-    print('Retrieving UniProt information from ' + str(len(ids)) + ' IDs.')
     result = pd.DataFrame()
-    for i in tqdm(range(0, len(ids), step), desc="UniProt ID mapping"):
+    for i in tqdm(range(0, len(ids), step), desc=f'Retrieving UniProt information from {str(len(ids))} IDs'):
         tries = 0
         done = False
         j = min(i + step, len(ids))
         while not done and tries < max_tries:
             try:
-                data = uniprot_request(ids[i:j], original_database, database_destination, columns=columns,
-                                       databases=databases)
+                data = uniprot_request(
+                    ids[i:j], original_database, database_destination, columns=columns, databases=databases)
                 if len(data) > 0:
                     uniprotinfo = pd.read_csv(StringIO(data), sep='\t')
                     k = (len(uniprotinfo.columns) - (30 if (
@@ -502,17 +500,23 @@ def upimapi():
 
     # Get UniProt information
     if not args.fasta:
-        columns = args.columns.split('&') if args.columns != '' else list()
-        databases = args.databases.split('&') if args.databases != '' else list()
+        if args.columns is not None:
+            args.columns = args.columns.split('&')
+        else:
+            args.columns = upmap.get_default_columns()
+        if args.databases is not None:
+            args.databases = args.databases.split('&')
+        else:
+            args.databases = upmap.get_default_databases()
 
         if args.output_table:
             table_output = args.output_table
+            print(f'Overrided table output to {table_output}')
             Path('/'.join(args.output_table.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
         else:
             table_output = f'{args.output}/uniprotinfo.tsv'
-        print(f'Overrided table output to {table_output}')
         uniprot_information_workflow(
-            ids, table_output, columns=columns, databases=databases, step=args.step, max_iter=args.max_tries,
+            ids, table_output, columns=args.columns, databases=args.databases, step=args.step, max_iter=args.max_tries,
             sleep_time=args.sleep)
 
         if not args.no_annotation:
