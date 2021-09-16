@@ -23,6 +23,7 @@ requirements:
     - diamond
     - psutil
     - tqdm
+    - requests
 
 test:
   commands:

@@ -12,13 +12,26 @@ class UniprotSupport:
     def __init__(self, **kwargs):
         self.__dict__ = kwargs
 
-        # I'm keeping "Entry name" because of IDs like ALBU_HUMAN, which work fine but the user may be confused by not appearing in the results: it appears on "Entry name"
-        self.default_columns = ['Entry', 'Entry name', 'Gene names', 'Protein names',
-            'EC number', 'Function[CC]', 'Pathway', 'Keywords', 'Protein existence',
-            'Gene ontology (GO)', 'Protein families', 'Taxonomic lineage (SUPERKINGDOM)',
-            'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)',
-            'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)',
-            'Taxonomic lineage (GENUS)', 'Taxonomic lineage (SPECIES)']
+        self.default_columns = [
+            'Entry',
+            'Entry name',
+            'Gene names',
+            'Protein names',
+            'EC number',
+            'Function[CC]',
+            'Pathway',
+            'Keywords',
+            'Protein existence',
+            'Gene ontology (GO)',
+            'Protein families',
+            'Taxonomic lineage (SUPERKINGDOM)',
+            'Taxonomic lineage (PHYLUM)',
+            'Taxonomic lineage (CLASS)',
+            'Taxonomic lineage (ORDER)',
+            'Taxonomic lineage (FAMILY)',
+            'Taxonomic lineage (GENUS)',
+            'Taxonomic lineage (SPECIES)',
+            'Taxonomic lineage IDs']
 
         self.default_databases = [
             'BioCyc Collection of Pathway/Genome Databases',
