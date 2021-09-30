@@ -92,10 +92,10 @@ def get_arguments():
     diamond_args.add_argument(
         "-mts", "--max-target-seqs", default=1, help="Number of annotations to output per sequence inputed [1]")
     diamond_args.add_argument(
-        "-b", "--block-size",
+        "-b", "--block-size", type=int,
         help="Billions of sequence letters to be processed at a time (default: auto determine best value)")
     diamond_args.add_argument(
-        "-c", "--index-chunks",
+        "-c", "--index-chunks", type=int,
         help="Number of chunks for processing the seed index (default: auto determine best value)")
     diamond_args.add_argument(
         "--taxids", nargs="+", help="Tax IDs to obtain protein sequences of for building a reference database.")
