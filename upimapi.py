@@ -552,27 +552,43 @@ def get_taxonomy_in_columns(data, tax_tsv):
 def append_value(result, comment):
     for key in result.keys():
         if comment.startswith(key):
-            result[key].append(comment)
+            result[key] += f'{comment}; '
             return result
 
 
-def get_comments(comments_data):
+def parse_comments(sp_data):
     result = {key: [] for key in [
         'FUNCTION:', 'SUBUNIT:', 'INTERACTION:', 'SUBCELLULAR LOCATION:', 'ALTERNATIVE PRODUCTS:',
         'TISSUE SPECIFICITY:', 'PTM:', 'POLYMORPHISM:', 'DISEASE:', 'MISCELLANEOUS:', 'SIMILARITY:', 'CAUTION:',
         'SEQUENCE CAUTION:', 'WEB RESOURCE:']}
-    for comments in comments_data:
+    for comments in sp_data['comments']:
         for comment in comments:
             append_value(result, comment)
     result = pd.DataFrame.from_dict(result, orient='index').reset_index()
-    for col in result.columns.tolist():
-        result[col] = result[col].apply('; '.join)
     result.columns = [
         'Function [CC]', 'Subunit structure [CC]', 'Interacts with', 'Subcellular location [CC]',
         'Alternative products (isoforms)', 'Tissue specificity', 'Post-translational modification', 'Polymorphism',
         'Involvement in disease', 'Miscellaneous [CC]', 'Sequence similarities', 'Caution', 'Sequence caution',
         'Web resources']
     return result
+
+
+def cross_references_to_columns(cross_refs):
+    result = {}
+    for ref in cross_refs:
+        if ref[0] in result.keys():
+            result[ref[0]] += f'{ref[1]};'
+        else:
+            result[ref[0]] = f'{ref[1]};'
+    return pd.Series(result)
+
+
+def parse_cross_references(sp_data):
+    ref_df = pd.DataFrame()
+    for cross_refs in sp_data['cross_references']:
+        ref_df = ref_df.append(cross_references_to_columns(cross_refs), ignore_index=True)
+    ref_df.columns = [f'Cross-references ({db})' for db in ref_df.columns.tolist()]
+    return ref_df
 
 
 def parse_sp_data(sp_data, tax_tsv):
@@ -584,10 +600,11 @@ def parse_sp_data(sp_data, tax_tsv):
     result['Taxonomic identifier (SPECIES)'] = sp_data['taxonomy_id'].apply(lambda x: x[0])
     result['Virus hosts'] = sp_data['host_organism'].apply(lambda x: x[0])
     result['Gene names (primary )'] = sp_data['gene_name'].apply(lambda x: x.split('=')[1].split('; ')[0])
+    result['Keywords'] = sp_data['keywords'].apply(';'.join)
     result['Organism'] = sp_data['organism'].str.rstrip('.')
     result = pd.merge(result, get_taxonomy_in_columns(sp_data, tax_tsv), left_index=True, right_index=True, how='left')
-    result = pd.merge(result, get_comments(sp_data['comments']), left_index=True, right_index=True, how='left')
-    result['Keywords'] = sp_data['keywords'].apply(';'.join)
+    result = pd.merge(result, parse_cross_references(sp_data, tax_tsv), left_index=True, right_index=True, how='left')
+    result = pd.merge(result, parse_comments(sp_data), left_index=True, right_index=True, how='left')
     result['Date of creation'] = sp_data['created'].apply(
         lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
     result['Date of last modification'] = sp_data['annotation_update'].apply(
