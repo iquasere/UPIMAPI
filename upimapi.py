@@ -13,7 +13,7 @@ from time import strftime, gmtime, time, sleep
 import urllib.error
 import urllib.parse
 import urllib.request
-from subprocess import run, Popen, PIPE
+from subprocess import run, Popen, PIPE, check_output
 
 import requests
 from psutil import virtual_memory
@@ -22,12 +22,14 @@ from multiprocessing import cpu_count
 from io import StringIO
 
 import pandas as pd
+import xml.etree.ElementTree as ET
 from tqdm import tqdm
 from datetime import datetime
+from Bio import SwissProt as SP
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.5.2'
+__version__ = '1.6.0'
 
 upmap = UniprotSupport()
 
@@ -69,6 +71,9 @@ def get_arguments():
     parser.add_argument(
         "--no-annotation", action="store_true", default=False,
         help="Do not perform annotation - input must be in one of BLAST result or TXT IDs file or STDIN")
+    parser.add_argument(
+        "--no-local-mapping", action="store_true", default=False,
+        help="Do not perform local ID mapping of SwissProt IDs. Advisable if none or few IDs of SwissProt are present.")
     parser.add_argument('-v', '--version', action='version', version=f'UPIMAPI {__version__}')
 
     diamond_args = parser.add_argument_group('DIAMOND arguments')
@@ -82,7 +87,7 @@ def get_arguments():
              "4. a custom database - Input will be considered as the database, and will be used as reference")
     diamond_args.add_argument(
         "-t", "--threads", type=int, default=cpu_count() - 2,
-        help="Number of threads to use in annotation steps [total - 2]")
+        help="Number of threads to use in annotation steps [total available - 2]")
     diamond_args.add_argument(
         "--evalue", type=float, default=1e-3, help="Maximum e-value to report annotations for [1e-3]")
     diamond_args.add_argument(
@@ -105,6 +110,10 @@ def get_arguments():
     args.resources_directory = args.resources_directory.rstrip('/')
 
     return args
+
+
+def timed_message(message):
+    print(f'{strftime("%Y-%m-%d %H:%M:%S", gmtime())}: {message}')
 
 
 def str2bool(v):
@@ -276,12 +285,12 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, database
     ids_missing = list(set(ids) - set(ids_done))
     last_ids_missing = None
 
-    print(f'IDs present in uniprotinfo file: {str(len(ids_done))}')
-    print(f'IDs missing: {str(len(ids_missing))}')
+    print(f'IDs present in uniprotinfo file: {len(ids_done)}')
+    print(f'IDs missing: {len(ids_missing)}')
 
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
-        print(f'Information already gathered for {str(len(ids_done))} ids. '
-              f'Still missing for {str(len(ids_missing))}.')
+        print(f'Information already gathered for {len(ids_done)} ids. '
+              f'Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
         uniprotinfo = get_uniprot_information(
             ids_missing, step=step, columns=columns, databases=databases, max_tries=max_iter, sleep_time=sleep_time)
@@ -455,6 +464,177 @@ def must_build_database(database, resources_folder):
     return True
 
 
+def get_tabular_taxonomy(output):
+    res = requests.get('https://ftp.uniprot.org/pub/databases/uniprot/current_release/rdf/taxonomy.rdf.xz')
+    with open('taxonomy.rdf.xz', 'wb') as f:
+        f.write(res.content)
+    run_command(f'unxz taxonomy.rdf.xz')
+    print('Reading RDF taxonomy')
+    root = ET.parse('taxonomy.rdf').getroot()
+    elems = root.findall('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}Description')
+    with open(output, 'w') as f:
+        written = f.write('\t'.join(['taxid', 'name', 'rank', 'parent_taxid']) + '\n')
+        for elem in tqdm(elems, desc='Converting XML taxonomy.rdf to TSV format'):
+            info = [elem.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about').split('/')[-1]]
+            scientific_name = elem.find('{http://purl.uniprot.org/core/}scientificName')
+            info.append(scientific_name.text if scientific_name is not None else '')
+            rank_elem = elem.find('{http://purl.uniprot.org/core/}rank')
+            info.append(rank_elem.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource').split('/')[-1]
+                        if rank_elem is not None else '')
+            upper_taxon = elem.find('{http://www.w3.org/2000/01/rdf-schema#}subClassOf')
+            info.append(upper_taxon.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource').split('/')[-1]
+                        if upper_taxon is not None else '')
+            written = f.write('\t'.join(info) + '\n')
+
+
+def get_match_id(record, ids):
+    if record.entry_name in ids:
+        return record.entry_name
+    if record.accessions[0] in ids:
+        return record.accessions[0]
+    return None
+
+
+def count_on_file(expression, file, compressed=False):
+    return int(check_output(f"{'zgrep' if compressed else 'grep'} -c '{expression}' {file}", shell=True))
+
+
+def get_local_swissprot_data(sp_dat_filename, ids):
+    sp_dat = SP.parse(open(sp_dat_filename))
+    result = list()
+    i = 1
+    record = next(sp_dat)
+    number_of_entries = count_on_file('Reviewed;', sp_dat_filename)
+    while record is not None and len(ids) > 0:
+        match_id = get_match_id(record, ids)
+        if match_id is not None:
+            result.append(record.__dict__)
+            ids.remove(match_id)
+        if i % 100000 == 0:
+            print(f'[{i}/{number_of_entries}] SwissProt entries queried')
+        record = next(sp_dat, None)
+        i += 1
+    print(f'[{i}/{number_of_entries}] SwissProt entries queried')
+    return result, ids
+
+
+# TODO - someday, so this becomes like "protein names" column of UniProt's API
+def description2names(description):
+    data = [key_value.split('=') for key_value in description.split('; ')]
+    data = {v[0]: v[1] for v in data if len(v) == 2}
+
+
+def lineage_to_columns(lineage, tax_tsv):
+    result = dict()
+    for taxon in lineage:
+        level = tax_tsv.loc[taxon]["rank"]
+        if type(level) == str:
+            result[f'Taxonomic lineage ({level.upper()})'] = taxon
+        elif type(level) == float:
+            continue
+        else:   # some taxIDs have multiple levels (e.g. "Craniata")
+            for lvl in level:
+                if type(lvl) == str:
+                    result[f'Taxonomic lineage ({lvl.upper()})'] = taxon
+    return pd.Series(result)
+
+
+def get_taxonomy_in_columns(data, tax_tsv):
+    tax_tsv = pd.read_csv(tax_tsv, sep='\t')
+    tax_tsv = tax_tsv[tax_tsv.name.notnull()]
+    tax_tsv.set_index('name', inplace=True)
+    tax_df = pd.DataFrame()
+    for lineage in data['organism_classification']:
+        tax_df = tax_df.append(lineage_to_columns(lineage, tax_tsv), ignore_index=True)
+    return tax_df
+
+
+def get_comments(comments_data):
+    result = list()
+    for comments in comments_data:
+        functions, subunits, interactions, subcellular_locations, alternative_products, tissue_specificity, ptms, polymorphisms, diseases, miscellaneous, \
+        diseases, similarities, cautions, sequence_cautions, web_resources = list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list()
+        for comment in comments:
+            if comment.startswith('FUNCTION:'):
+                functions.append(comment)
+            elif comment.startswith('SUBUNIT:'):
+                subunits.append(comment)
+            elif comment.startswith('INTERACTION:'):
+                interactions.append(comment)
+            elif comment.startswith('SUBCELLULAR LOCATION:'):
+                subcellular_locations.append(comment)
+            elif comment.startswith('ALTERNATIVE PRODUCTS:'):
+                alternative_products.append(comment)
+            elif comment.startswith('TISSUE SPECIFICITY:'):
+                tissue_specificity.append(comment)
+            elif comment.startswith('PTM:'):
+                ptms.append(comment)
+            elif comment.startswith('POLYMORPHISM:'):
+                polymorphisms.append(comment)
+            elif comment.startswith('DISEASE:'):
+                diseases.append(comment)
+            elif comment.startswith('MISCELLANEOUS:'):
+                miscellaneous.append(comment)
+            elif comment.startswith('SIMILARITY:'):
+                similarities.append(comment)
+            elif comment.startswith('CAUTION:'):
+                cautions.append(comment)
+            elif comment.startswith('SEQUENCE CAUTION:'):
+                sequence_cautions.append(comment)
+            elif comment.startswith('WEB RESOURCE:'):
+                web_resources.append(comment)
+            else:
+                print(f'A comment yet not recognized!\n{comment}')
+        result.append([
+            functions, subunits, interactions, subcellular_locations, alternative_products, tissue_specificity, ptms, polymorphisms, miscellaneous,
+            diseases, similarities, cautions, sequence_cautions, web_resources])
+    return pd.DataFrame(
+        [['; '.join(array) for array in comment] for comment in result],
+        columns=[
+            'Function [CC]', 'Subunit structure [CC]', 'Interacts with', 'Subcellular location [CC]',
+            'Alternative products (isoforms)', 'Tissue specificity', 'Post-translational modification', 'Polymorphism', 'Involvement in disease', 'Miscellaneous [CC]',
+            'Sequence similarities', 'Caution', 'Sequence caution', 'Web resources'])
+
+
+def parse_sp_data(sp_data, tax_tsv):
+    sp_data = pd.DataFrame(sp_data)
+    result = pd.DataFrame()
+    result['Date of last modification'] = sp_data['annotation_update'].apply(
+        lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
+    result['Version (entry)'] = sp_data['annotation_update'].apply(lambda x: x[1])
+    result['Date of last sequence modification'] = sp_data['sequence_update'].apply(
+        lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
+    result['Version (sequence)'] = sp_data['sequence_update'].apply(lambda x: x[1])
+    # TODO - work gene names for columns "Gene names" and "Gene names (ORF )"
+    result['Gene names (primary )'] = sp_data['gene_name'].apply(lambda x: x.split('=')[1].split('; ')[0])
+    result['Organism'] = sp_data['organism'].str.rstrip('.')
+    result = pd.merge(result, get_taxonomy_in_columns(sp_data, tax_tsv), left_index=True, right_index=True, how='left')
+    result = pd.merge(result, get_comments(sp_data['comments']), left_index=True, right_index=True, how='left')
+    result['Keywords'] = sp_data['keywords'].apply(';'.join)
+    for k, v in upmap.local2api.items():
+        if v not in [None, False]:
+            result[v] = sp_data[k]
+    return result
+
+
+def get_sprot_dat(sp_dat):
+    r = requests.get(
+        'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.dat.gz',
+        allow_redirects=True)
+    with open(sp_dat, 'wb') as f:
+        f.write(r.content)
+
+
+def local_id_mapping(ids, sp_dat, tax_tsv, output):
+    if not os.path.isfile(sp_dat):
+        get_sprot_dat(sp_dat)
+    if not os.path.isfile(tax_tsv):
+        get_tabular_taxonomy(tax_tsv)
+    sp_data, ids_not_found = get_local_swissprot_data(sp_dat, ids)
+    parse_sp_data(sp_data, tax_tsv).to_csv(output, sep='\t')
+    return ids_not_found
+
+
 def upimapi():
     args = get_arguments()
     Path(args.output).mkdir(parents=True, exist_ok=True)
@@ -515,6 +695,14 @@ def upimapi():
             Path('/'.join(args.output_table.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
         else:
             table_output = f'{args.output}/uniprotinfo.tsv'
+
+        # ID mapping through local information
+        if not args.no_local_mapping:
+            ids = local_id_mapping(
+                ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
+                table_output)
+
+        # ID mapping through API
         uniprot_information_workflow(
             ids, table_output, columns=args.columns, databases=args.databases, step=args.step, max_iter=args.max_tries,
             sleep_time=args.sleep)
@@ -532,4 +720,4 @@ def upimapi():
 if __name__ == '__main__':
     start_time = time()
     upimapi()
-    print(f'UPIMAPI analysis finished in {strftime("%Hh%Mm%Ss", gmtime(time() - start_time))}')
+    timed_message(f'UPIMAPI analysis finished in {strftime("%Hh%Mm%Ss", gmtime(time() - start_time))}')

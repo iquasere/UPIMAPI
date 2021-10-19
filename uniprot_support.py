@@ -6,6 +6,8 @@ By João Sequeira
 Mar 2020
 """
 
+from datetime import datetime
+
 
 class UniprotSupport:
 
@@ -416,6 +418,39 @@ class UniprotSupport:
             'WormBase': 'WormBase',
             'Xenopus laevis and tropicalis biology and genomics resource': 'Xenbase',
             'Zebrafish Information Network genome database': 'ZFIN'}
+
+        self.local2api = {
+            'entry_name': 'Entry name',
+            'data_class': 'Status',
+            'molecule_type': None,  # TODO - find which one
+            'sequence_length': 'Length',
+            'accessions': 'Entry',
+            'created': 'Date of creation',
+            'sequence_update': False,
+            'annotation_update': False,
+            'description': 'Protein names',
+            'gene_name': False,
+            'organism': False,
+            'organelle':None,   # TODO - find which one
+            'organism_classification': False,
+            'taxonomy_id': 'Taxonomic identifier (SPECIES)', # TODO - check if right when UniProt service works again
+            'host_organism': 'Virus hosts',     # TODO - check if right when you have values
+            'host_taxonomy_id': None,   # TODO - find which one
+            'references': None,     # TODO - find which one
+            'comments': False,
+            'cross_references': None,    # TODO - check if right when UniProt service works again
+            'keywords': False,
+            'features': None,      # TODO - must be worked on, includes tons of stuff, not gonna do it now
+            'protein_existence': None,     # TODO - find which one
+            'seqinfo': None,    # TODO - find which one
+            'sequence': 'Sequence'
+        }
+
+        self.local2api_functions = {
+            'data_class': lambda x: x.lowercase(),
+            'created': lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'),
+            'sequence_update': lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d')
+        }
 
     def get_default_columns(self):
         return self.default_columns
