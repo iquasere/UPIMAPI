@@ -515,7 +515,7 @@ def get_local_swissprot_data(sp_dat_filename, ids):
         record = next(sp_dat, None)
         i += 1
     print(f'[{i}/{number_of_entries}] SwissProt entries queried')
-    return result, ids
+    return pd.DataFrame(result), ids
 
 
 # TODO - someday, so this becomes like "protein names" column of UniProt's API
@@ -549,56 +549,47 @@ def get_taxonomy_in_columns(data, tax_tsv):
     return tax_df
 
 
+def append_value(result, comment):
+    for key in result.keys():
+        if comment.startswith(key):
+            result[key].append(comment)
+            return result
+
+
 def get_comments(comments_data):
-    result = list()
+    result = {key: [] for key in [
+        'FUNCTION:', 'SUBUNIT:', 'INTERACTION:', 'SUBCELLULAR LOCATION:', 'ALTERNATIVE PRODUCTS:',
+        'TISSUE SPECIFICITY:', 'PTM:', 'POLYMORPHISM:', 'DISEASE:', 'MISCELLANEOUS:', 'SIMILARITY:', 'CAUTION:',
+        'SEQUENCE CAUTION:', 'WEB RESOURCE:']}
     for comments in comments_data:
-        functions, subunits, interactions, subcellular_locations, alternative_products, tissue_specificity, ptms, polymorphisms, diseases, miscellaneous, \
-        diseases, similarities, cautions, sequence_cautions, web_resources = list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list(), list()
         for comment in comments:
-            if comment.startswith('FUNCTION:'):
-                functions.append(comment)
-            elif comment.startswith('SUBUNIT:'):
-                subunits.append(comment)
-            elif comment.startswith('INTERACTION:'):
-                interactions.append(comment)
-            elif comment.startswith('SUBCELLULAR LOCATION:'):
-                subcellular_locations.append(comment)
-            elif comment.startswith('ALTERNATIVE PRODUCTS:'):
-                alternative_products.append(comment)
-            elif comment.startswith('TISSUE SPECIFICITY:'):
-                tissue_specificity.append(comment)
-            elif comment.startswith('PTM:'):
-                ptms.append(comment)
-            elif comment.startswith('POLYMORPHISM:'):
-                polymorphisms.append(comment)
-            elif comment.startswith('DISEASE:'):
-                diseases.append(comment)
-            elif comment.startswith('MISCELLANEOUS:'):
-                miscellaneous.append(comment)
-            elif comment.startswith('SIMILARITY:'):
-                similarities.append(comment)
-            elif comment.startswith('CAUTION:'):
-                cautions.append(comment)
-            elif comment.startswith('SEQUENCE CAUTION:'):
-                sequence_cautions.append(comment)
-            elif comment.startswith('WEB RESOURCE:'):
-                web_resources.append(comment)
-            else:
-                print(f'A comment yet not recognized!\n{comment}')
-        result.append([
-            functions, subunits, interactions, subcellular_locations, alternative_products, tissue_specificity, ptms, polymorphisms, miscellaneous,
-            diseases, similarities, cautions, sequence_cautions, web_resources])
-    return pd.DataFrame(
-        [['; '.join(array) for array in comment] for comment in result],
-        columns=[
-            'Function [CC]', 'Subunit structure [CC]', 'Interacts with', 'Subcellular location [CC]',
-            'Alternative products (isoforms)', 'Tissue specificity', 'Post-translational modification', 'Polymorphism', 'Involvement in disease', 'Miscellaneous [CC]',
-            'Sequence similarities', 'Caution', 'Sequence caution', 'Web resources'])
+            append_value(result, comment)
+    result = pd.DataFrame.from_dict(result, orient='index').reset_index()
+    for col in result.columns.tolist():
+        result[col] = result[col].apply('; '.join)
+    result.columns = [
+        'Function [CC]', 'Subunit structure [CC]', 'Interacts with', 'Subcellular location [CC]',
+        'Alternative products (isoforms)', 'Tissue specificity', 'Post-translational modification', 'Polymorphism',
+        'Involvement in disease', 'Miscellaneous [CC]', 'Sequence similarities', 'Caution', 'Sequence caution',
+        'Web resources']
+    return result
 
 
 def parse_sp_data(sp_data, tax_tsv):
-    sp_data = pd.DataFrame(sp_data)
     result = pd.DataFrame()
+    result['Entry'] = sp_data['accessions'].apply(lambda x: x[0])
+    for k, v in upmap.local2api.items():
+        if v not in [None, False]:
+            result[v] = sp_data[k]
+    result['Taxonomic identifier (SPECIES)'] = sp_data['taxonomy_id'].apply(lambda x: x[0])
+    result['Virus hosts'] = sp_data['host_organism'].apply(lambda x: x[0])
+    result['Gene names (primary )'] = sp_data['gene_name'].apply(lambda x: x.split('=')[1].split('; ')[0])
+    result['Organism'] = sp_data['organism'].str.rstrip('.')
+    result = pd.merge(result, get_taxonomy_in_columns(sp_data, tax_tsv), left_index=True, right_index=True, how='left')
+    result = pd.merge(result, get_comments(sp_data['comments']), left_index=True, right_index=True, how='left')
+    result['Keywords'] = sp_data['keywords'].apply(';'.join)
+    result['Date of creation'] = sp_data['created'].apply(
+        lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
     result['Date of last modification'] = sp_data['annotation_update'].apply(
         lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
     result['Version (entry)'] = sp_data['annotation_update'].apply(lambda x: x[1])
@@ -606,14 +597,6 @@ def parse_sp_data(sp_data, tax_tsv):
         lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
     result['Version (sequence)'] = sp_data['sequence_update'].apply(lambda x: x[1])
     # TODO - work gene names for columns "Gene names" and "Gene names (ORF )"
-    result['Gene names (primary )'] = sp_data['gene_name'].apply(lambda x: x.split('=')[1].split('; ')[0])
-    result['Organism'] = sp_data['organism'].str.rstrip('.')
-    result = pd.merge(result, get_taxonomy_in_columns(sp_data, tax_tsv), left_index=True, right_index=True, how='left')
-    result = pd.merge(result, get_comments(sp_data['comments']), left_index=True, right_index=True, how='left')
-    result['Keywords'] = sp_data['keywords'].apply(';'.join)
-    for k, v in upmap.local2api.items():
-        if v not in [None, False]:
-            result[v] = sp_data[k]
     return result
 
 
@@ -631,7 +614,7 @@ def local_id_mapping(ids, sp_dat, tax_tsv, output):
     if not os.path.isfile(tax_tsv):
         get_tabular_taxonomy(tax_tsv)
     sp_data, ids_not_found = get_local_swissprot_data(sp_dat, ids)
-    parse_sp_data(sp_data, tax_tsv).to_csv(output, sep='\t')
+    parse_sp_data(sp_data, tax_tsv).to_csv(output, sep='\t', index=False)
     return ids_not_found
 
 

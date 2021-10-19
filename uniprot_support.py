@@ -422,27 +422,16 @@ class UniprotSupport:
         self.local2api = {
             'entry_name': 'Entry name',
             'data_class': 'Status',
-            'molecule_type': None,  # TODO - find which one
+            'molecule_type': None,          # TODO - find which one
             'sequence_length': 'Length',
-            'accessions': 'Entry',
-            'created': 'Date of creation',
-            'sequence_update': False,
-            'annotation_update': False,
             'description': 'Protein names',
-            'gene_name': False,
-            'organism': False,
-            'organelle':None,   # TODO - find which one
-            'organism_classification': False,
-            'taxonomy_id': 'Taxonomic identifier (SPECIES)', # TODO - check if right when UniProt service works again
-            'host_organism': 'Virus hosts',     # TODO - check if right when you have values
-            'host_taxonomy_id': None,   # TODO - find which one
-            'references': None,     # TODO - find which one
-            'comments': False,
-            'cross_references': None,    # TODO - check if right when UniProt service works again
-            'keywords': False,
-            'features': None,      # TODO - must be worked on, includes tons of stuff, not gonna do it now
-            'protein_existence': None,     # TODO - find which one
-            'seqinfo': None,    # TODO - find which one
+            'organelle': None,              # TODO - find which one
+            'host_taxonomy_id': None,       # TODO - find which one
+            'references': None,             # TODO - find which one
+            'cross_references': None,       # TODO - check if right when UniProt service works again
+            'features': None,               # TODO - must be worked on, includes tons of stuff, not gonna do it now
+            'protein_existence': None,      # TODO - find which one
+            'seqinfo': None,                # TODO - find which one
             'sequence': 'Sequence'
         }
 
