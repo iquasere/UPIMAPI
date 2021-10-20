@@ -325,19 +325,19 @@ def determine_full_id(ids):
     return False
 
 
-def get_ids(inpute, input_type='blast', full_id='auto'):
+def get_ids(args_input, input_type='blast', full_id='auto'):
     if input_type == 'blast':
-        ids = parse_blast(inpute)['sseqid']
+        ids = parse_blast(args_input)['sseqid']
     elif input_type == 'txt':
-        ids = open(inpute).read().split('\n')
+        ids = open(args_input).read().split('\n')
     else:
-        ids = inpute.split(',')
+        ids = args_input.split(',')
     if full_id == 'auto':
         full_id = determine_full_id(ids)
         print(f'Auto determined "full id" as: {full_id}')
     if full_id:
-        return [ide.split('|')[1] for ide in ids if ide != '*'], full_id
-    return [ide for ide in ids if ide != '*'], full_id
+        return [ide.split('|')[1] for ide in ids if ide not in ['*', '']], full_id
+    return [ide for ide in ids if ide not in ['*', '']], full_id
 
 
 def run_command(bash_command, print_message=True):
@@ -540,7 +540,7 @@ def lineage_to_columns(lineage, tax_tsv):
 
 
 def get_taxonomy_in_columns(data, tax_tsv):
-    tax_tsv = pd.read_csv(tax_tsv, sep='\t')
+    tax_tsv = pd.read_csv(tax_tsv, sep='\t', dtype={'taxid':str, 'name':str, 'rank':str, 'parent_taxid':str})
     tax_tsv = tax_tsv[tax_tsv.name.notnull()]
     tax_tsv.set_index('name', inplace=True)
     tax_df = pd.DataFrame()
@@ -549,22 +549,19 @@ def get_taxonomy_in_columns(data, tax_tsv):
     return tax_df
 
 
-def append_value(result, comment):
-    for key in result.keys():
-        if comment.startswith(key):
-            result[key] += f'{comment}; '
-            return result
-
-
 def parse_comments(sp_data):
-    result = {key: [] for key in [
-        'FUNCTION:', 'SUBUNIT:', 'INTERACTION:', 'SUBCELLULAR LOCATION:', 'ALTERNATIVE PRODUCTS:',
-        'TISSUE SPECIFICITY:', 'PTM:', 'POLYMORPHISM:', 'DISEASE:', 'MISCELLANEOUS:', 'SIMILARITY:', 'CAUTION:',
-        'SEQUENCE CAUTION:', 'WEB RESOURCE:']}
+    result = pd.DataFrame()
     for comments in sp_data['comments']:
+        partial = {key: '' for key in [
+            'FUNCTION', 'SUBUNIT', 'INTERACTION', 'SUBCELLULAR LOCATION', 'ALTERNATIVE PRODUCTS', 'TISSUE SPECIFICITY',
+            'PTM', 'POLYMORPHISM', 'DISEASE', 'MISCELLANEOUS', 'SIMILARITY', 'CAUTION', 'SEQUENCE CAUTION',
+            'WEB RESOURCE']}
         for comment in comments:
-            append_value(result, comment)
-    result = pd.DataFrame.from_dict(result, orient='index').reset_index()
+            if comment.split(':')[0] in partial.keys():
+                partial[comment.split(':')[0]] += f'{comment} '
+            else:
+                print(f'Comment still not implemented: [{comment.split(":")[0]}]')
+        result = result.append(pd.Series(partial), ignore_index=True)
     result.columns = [
         'Function [CC]', 'Subunit structure [CC]', 'Interacts with', 'Subcellular location [CC]',
         'Alternative products (isoforms)', 'Tissue specificity', 'Post-translational modification', 'Polymorphism',
@@ -597,13 +594,14 @@ def parse_sp_data(sp_data, tax_tsv):
     for k, v in upmap.local2api.items():
         if v not in [None, False]:
             result[v] = sp_data[k]
-    result['Taxonomic identifier (SPECIES)'] = sp_data['taxonomy_id'].apply(lambda x: x[0])
-    result['Virus hosts'] = sp_data['host_organism'].apply(lambda x: x[0])
-    result['Gene names (primary )'] = sp_data['gene_name'].apply(lambda x: x.split('=')[1].split('; ')[0])
+    result['Taxonomic identifier (SPECIES)'] = sp_data['taxonomy_id'].apply(lambda x: x[0] if len(x) > 0 else x)
+    result['Virus hosts'] = sp_data['host_organism'].apply(lambda x: x[0] if len(x) > 0 else x)
+    result['Gene names (primary )'] = sp_data['gene_name'].apply(
+        lambda x: x.split('=')[1].split('; ')[0] if len(x) > 0 else x)
     result['Keywords'] = sp_data['keywords'].apply(';'.join)
     result['Organism'] = sp_data['organism'].str.rstrip('.')
     result = pd.merge(result, get_taxonomy_in_columns(sp_data, tax_tsv), left_index=True, right_index=True, how='left')
-    result = pd.merge(result, parse_cross_references(sp_data, tax_tsv), left_index=True, right_index=True, how='left')
+    result = pd.merge(result, parse_cross_references(sp_data), left_index=True, right_index=True, how='left')
     result = pd.merge(result, parse_comments(sp_data), left_index=True, right_index=True, how='left')
     result['Date of creation'] = sp_data['created'].apply(
         lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
@@ -635,12 +633,20 @@ def local_id_mapping(ids, sp_dat, tax_tsv, output):
     return ids_not_found
 
 
+def get_input_type(input_ids, blast=True):
+    if input_ids is None:
+        return input('IDs to perform mapping on (comma separated values):'), 'stdin'
+    if blast:
+        return input_ids, 'blast'
+    return input_ids, 'txt'
+
+
 def upimapi():
     args = get_arguments()
     Path(args.output).mkdir(parents=True, exist_ok=True)
     Path(args.resources_directory).mkdir(parents=True, exist_ok=True)
 
-    # Using annotation with DIAMOND
+    # Annotation with DIAMOND
     if not args.no_annotation:
         db2file = {'uniprot': f'{args.resources_directory}/uniprot.fasta',
                    'swissprot': f'{args.resources_directory}/uniprot_sprot.fasta',
@@ -666,17 +672,10 @@ def upimapi():
         args.input = f'{args.output}/aligned.blast'
         args.blast = True
 
-    # Get IDs from STDIN and set input type
-    if args.input is None:
-        args.input = input('IDs to perform mapping on (comma separated values):')
-        input_type = 'stdin'
-    elif args.blast:
-        input_type = 'blast'
-    else:
-        input_type = 'txt'
+    args_input, input_type = get_input_type(args.input, blast=args.blast)
 
     # Get the IDs
-    ids, full_id = get_ids(args.input, input_type=input_type, full_id=args.full_id)
+    ids, full_id = get_ids(args_input, input_type=input_type, full_id=args.full_id)
 
     # Get UniProt information
     if not args.fasta:
@@ -710,7 +709,7 @@ def upimapi():
         if not args.no_annotation:
             blast = parse_blast(f'{args.output}/aligned.blast')
             if full_id:
-                blast.sseqid = [ide.split('|')[1] if ide != '*' else ide for ide in blast.sseqid]
+                blast.sseqid = [ide.split('|')[1] if ide not in ['*',''] else ide for ide in blast.sseqid]
             result = pd.merge(blast, pd.read_csv(table_output, sep='\t'), left_on='sseqid', right_on='Entry')
             result.to_csv(f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
