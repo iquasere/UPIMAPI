@@ -554,7 +554,6 @@ def lineage_to_columns(lineage, tax_tsv):
                 if type(rank) == str:
                     l2c_result[f'Taxonomic lineage ({rank.upper()})'] = taxon
                     l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
-
     l2c_result['Taxonomic lineage (ALL)'] = ', '.join(set(l2c_result.values()))
     l2c_taxids['Taxonomic identifier (ALL)'] = ', '.join(set(l2c_taxids.values()))
     l2c_result = {**l2c_result, **l2c_taxids, 'index': lineage}
@@ -885,6 +884,8 @@ def parse_sp_data(sp_data, tax_tsv):
     result['Date of last sequence modification'] = sp_data['sequence_update'].apply(
         lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
     result['Version (sequence)'] = sp_data['sequence_update'].apply(lambda x: x[1])
+    result['PubMed ID'] = sp_data['references'].apply(
+        lambda x: '; '.join([ref.references[0][1] for ref in x if len(ref.references) > 0]))
     return result
 
 
