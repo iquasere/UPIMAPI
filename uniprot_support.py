@@ -425,11 +425,8 @@ class UniprotSupport:
             'molecule_type': None,          # TODO - find which one
             'sequence_length': 'Length',
             'description': 'Protein names',
-            'organelle': None,              # TODO - find which one
             'host_taxonomy_id': None,       # TODO - find which one
-            'references': None,             # TODO - find which one
-            'cross_references': None,       # TODO - check if right when UniProt service works again
-            'features': None,               # TODO - must be worked on, includes tons of stuff, not gonna do it now
+            'references': None,             # TODO
             'protein_existence': None,      # TODO - find which one
             'seqinfo': None,                # TODO - find which one
             'sequence': 'Sequence'

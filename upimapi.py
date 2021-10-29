@@ -18,7 +18,7 @@ from subprocess import run, Popen, PIPE, check_output
 import requests
 from psutil import virtual_memory
 from pathlib import Path
-from multiprocessing import cpu_count
+from multiprocessing import cpu_count, Pool, Manager
 from io import StringIO
 
 import pandas as pd
@@ -26,6 +26,8 @@ import xml.etree.ElementTree as ET
 from tqdm import tqdm
 from datetime import datetime
 from Bio import SwissProt as SP
+import numpy as np
+from functools import partial
 
 from uniprot_support import UniprotSupport
 
@@ -138,6 +140,23 @@ def parse_blast(blast):
     return result
 
 
+def parallelize(data, func, num_of_processes=8):
+    data_split = np.array_split(data, num_of_processes)
+    pool = Pool(num_of_processes)
+    data = pd.concat(pool.map(func, data_split))
+    pool.close()
+    pool.join()
+    return data
+
+
+def run_on_subset(func, data_subset, **kwargs):
+    return data_subset.apply(func, kwargs)
+
+
+def parallelize_on_rows(data, func, num_of_processes=8, **kwargs):
+    return parallelize(data, partial(run_on_subset, func, kwargs), num_of_processes)
+
+
 def uniprot_request(ids, original_database='ACC+ID', database_destination='',
                     output_format='tab', columns=None, databases=None):
     """
@@ -220,7 +239,6 @@ def get_uniprot_fasta(ids, step=1000, sleep_time=30):
         str object containing the fasta sequences and headers
         of the proteis belonging to the IDs queried will be returned
     """
-
     print(f'Building FASTA from {len(ids)} IDs.')
     result = str()
     for i in tqdm(range(0, len(ids), step), desc="UniProt ID mapping"):
@@ -518,91 +536,347 @@ def get_local_swissprot_data(sp_dat_filename, ids):
     return pd.DataFrame(result), ids
 
 
-# TODO - someday, so this becomes like "protein names" column of UniProt's API
-def description2names(description):
-    data = [key_value.split('=') for key_value in description.split('; ')]
-    data = {v[0]: v[1] for v in data if len(v) == 2}
-
-
 def lineage_to_columns(lineage, tax_tsv):
-    result = dict()
+    l2c_result = {}
+    l2c_taxids = {}
     for taxon in lineage:
-        level = tax_tsv.loc[taxon]["rank"]
-        if type(level) == str:
-            result[f'Taxonomic lineage ({level.upper()})'] = taxon
-        elif type(level) == float:
-            continue
+        match = tax_tsv.loc[taxon, ["rank", "taxid"]]
+        if type(match) == pd.core.series.Series:
+            rank, taxid = match[["rank", "taxid"]]
+            if type(rank) == str:
+                l2c_result[f'Taxonomic lineage ({rank.upper()})'] = taxon
+                l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
+            else:       # name is None, but taxid is something (always?)
+                l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
         else:   # some taxIDs have multiple levels (e.g. "Craniata")
-            for lvl in level:
-                if type(lvl) == str:
-                    result[f'Taxonomic lineage ({lvl.upper()})'] = taxon
-    return pd.Series(result)
+            for i in range(len(match)):
+                rank, taxid = match.iloc[i][["rank", "taxid"]]
+                if type(rank) == str:
+                    l2c_result[f'Taxonomic lineage ({rank.upper()})'] = taxon
+                    l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
+
+    l2c_result['Taxonomic lineage (ALL)'] = ', '.join(set(l2c_result.values()))
+    l2c_taxids['Taxonomic identifier (ALL)'] = ', '.join(set(l2c_taxids.values()))
+    l2c_result = {**l2c_result, **l2c_taxids, 'index': lineage}
+    return l2c_result
 
 
-def get_taxonomy_in_columns(data, tax_tsv):
-    tax_tsv = pd.read_csv(tax_tsv, sep='\t', dtype={'taxid':str, 'name':str, 'rank':str, 'parent_taxid':str})
-    tax_tsv = tax_tsv[tax_tsv.name.notnull()]
-    tax_tsv.set_index('name', inplace=True)
-    tax_df = pd.DataFrame()
-    for lineage in data['organism_classification']:
-        tax_df = tax_df.append(lineage_to_columns(lineage, tax_tsv), ignore_index=True)
-    return tax_df
+def lineages_to_columns(lineages, tax_tsv):
+    return [lineage_to_columns(lineage, tax_tsv) for lineage in lineages]
+
+
+def split_list(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n))
+
+
+def get_upper_taxids(taxid, tax_df):
+    """
+    :param taxid: str - taxID to get upper taxIDs from
+    :param tax_df: pd.DataFrame - of read taxonomy.tsv (from taxonomy.rdf)
+    :returns list - of upper taxIDs
+    """
+    if taxid == '0':
+        return list()
+    taxids = list()
+    while taxid != '1' and taxid != 'Taxon':
+        taxids.append(taxid)
+        taxid = tax_df.loc[taxid]['parent_taxid']
+    return taxids
+
+
+def parse_taxonomy(data, tax_tsv, threads=15):
+    tax_tsv_df = pd.read_csv(tax_tsv, sep='\t', dtype={'taxid': str, 'name': str, 'rank': str, 'parent_taxid': str})
+    tax_tsv_df = tax_tsv_df[tax_tsv_df.name.notnull()]
+    tax_tsv_df.set_index('name', inplace=True)
+    all_classifications = split_list(data['organism_classification'].drop_duplicates().tolist(), threads)
+    with Manager() as m:
+        with m.Pool() as p:
+            result = p.starmap(lineages_to_columns, [(classifications, tax_tsv_df) for classifications in all_classifications])
+    decompacted = []
+    for res in result:
+        decompacted += res
+    return pd.DataFrame(decompacted).set_index('index')
 
 
 def parse_comments(sp_data):
-    result = pd.DataFrame()
+    result = []
+    bpc_list = []
     for comments in sp_data['comments']:
         partial = {key: '' for key in [
             'FUNCTION', 'SUBUNIT', 'INTERACTION', 'SUBCELLULAR LOCATION', 'ALTERNATIVE PRODUCTS', 'TISSUE SPECIFICITY',
             'PTM', 'POLYMORPHISM', 'DISEASE', 'MISCELLANEOUS', 'SIMILARITY', 'CAUTION', 'SEQUENCE CAUTION',
-            'WEB RESOURCE']}
+            'WEB RESOURCE', 'MASS SPECTROMETRY', 'RNA EDITING', 'CATALYTIC ACTIVITY', 'COFACTOR', 'ACTIVITY REGULATION',
+            'PATHWAY', 'DEVELOPMENTAL STAGE', 'INDUCTION', 'ALLERGEN', 'BIOTECHNOLOGY', 'DISRUPTION PHENOTYPE',
+            'PHARMACEUTICAL', 'TOXIC DOSE', 'DOMAIN']}
+        bpc_dict = {}
         for comment in comments:
-            if comment.split(':')[0] in partial.keys():
-                partial[comment.split(':')[0]] += f'{comment} '
+            comment = comment.split(': ')
+            if comment[0] in partial.keys():
+                partial[comment[0]] += f'{": ".join(comment)} '
             else:
-                print(f'Comment still not implemented: [{comment.split(":")[0]}]')
-        result = result.append(pd.Series(partial), ignore_index=True)
-    result.columns = [
+                if comment[0] in ['BIOPHYSICOCHEMICAL PROPERTIES']:
+                    if comment[1] not in bpc_dict.keys():
+                        bpc_dict[comment[1]] = [f'{comment[0]}: {comment[1]}: {comment[2]}']
+                    else:
+                        bpc_dict[comment[1]].append(f'{comment[0]}: {comment[1]}: {comment[2]}')
+                else:
+                    print(f'Comment still not implemented: [{comment[0]}]')
+        result.append(partial)
+        bpc_dict['Kinetics'] = bpc_dict.pop('Kinetic parameters')
+        bpc_list.append(bpc_dict)
+    result = pd.DataFrame(result, columns=[
         'Function [CC]', 'Subunit structure [CC]', 'Interacts with', 'Subcellular location [CC]',
         'Alternative products (isoforms)', 'Tissue specificity', 'Post-translational modification', 'Polymorphism',
         'Involvement in disease', 'Miscellaneous [CC]', 'Sequence similarities', 'Caution', 'Sequence caution',
-        'Web resources']
-    return result
+        'Web resources', 'Mass spectrometry', 'RNA editing', 'Catalytic activity', 'Cofactor', 'Activity regulation',
+        'Pathway', 'Developmental stage', 'Induction', 'Allergenic properties', 'Biotechnological use',
+        'Disruption phenotype', 'Pharmaceutical use', 'Toxic dose', 'Domain [CC]'])
+    result['Erroneous gene model prediction'] = result['Sequence caution']
+    bpc_df = pd.DataFrame(bpc_list)
+    for col in bpc_df:
+        bpc_df[col] = bpc_df[col].apply(lambda x: '; '.join(x) if type(x) == list else x)
+    return pd.concat([result, bpc_df], axis=1)
+
+
+def add_to_dict(dictionary, key, value):
+    if key in dictionary.keys():
+        dictionary[key] += value
+    else:
+        dictionary[key] = value
 
 
 def cross_references_to_columns(cross_refs):
     result = {}
+    go_dict = {}
+    go_rel = {'C': 'cellular component', 'F': 'molecular function', 'P': 'biological process'}
     for ref in cross_refs:
-        if ref[0] in result.keys():
-            result[ref[0]] += f'{ref[1]};'
+        if ref[0] == 'GO':
+            refie = ref[2].split(':')
+            add_to_dict(go_dict, f'Gene ontology ({go_rel[refie[0]]})', f'{refie[1]} [{ref[1]}]; ')
+            add_to_dict(go_dict, 'Gene ontology (GO)', f'{refie[1]} [{ref[1]}]; ')
+            add_to_dict(go_dict, 'Gene ontology IDs', f'{ref[1]}; ')
         else:
-            result[ref[0]] = f'{ref[1]};'
-    return pd.Series(result)
+            if ref[0] == 'Proteomes':
+                value = f'{ref[1]}: {ref[2]}'
+            else:
+                value = f'{ref[1]};'
+            add_to_dict(result, ref[0], value)
+    return result, go_dict
 
 
 def parse_cross_references(sp_data):
-    ref_df = pd.DataFrame()
-    for cross_refs in sp_data['cross_references']:
-        ref_df = ref_df.append(cross_references_to_columns(cross_refs), ignore_index=True)
-    ref_df.columns = [f'Cross-references ({db})' for db in ref_df.columns.tolist()]
+    ref_df = pd.DataFrame([cross_references_to_columns(cross_refs) for cross_refs in sp_data['cross_references']])
+    ref_df.columns = map(lambda x: f'Cross-references ({x})', ref_df.columns)
     return ref_df
 
 
+def gene_name_to_columns(genes):
+    if type(genes) == float:
+        info = {}
+    else:
+        info = [pair.split('=') for pair in genes.rstrip(';').split('; ')]
+        info = {pair[0]: pair[1] for pair in info}
+    return {'Gene names': ' '.join(info.values()) if type(info) != float else '',
+            'Gene names  (ordered locus )': info['OrderedLocusNames'] if 'OrderedLocusNames' in info else '',
+            'Gene names  (ORF )': info['ORFNames'] if 'ORFNames' in info else '',
+            'Gene names  (primary )': info['Name'] if 'Name' in info else '',
+            'Gene names  (synonym )': info['Synonyms'] if 'Synonyms' in info else ''}
+
+
+def parse_gene_names(sp_data):
+    return pd.DataFrame([gene_name_to_columns(genes) for genes in sp_data['gene_name']])
+
+
+def parse_description_text(description):
+    result = {}
+    parts = description[:-1].split('; ')
+    i = 0
+    while i < len(parts):
+        parted = parts[i].split('=')
+        if parted[0].startswith('RecName: Full'):
+            result['RecName'] = {}
+            result['RecName']['Full'] = parted[1]
+            i += 1
+            while i < len(parts) and ':' not in parts[i].split()[0]:
+                parted = parts[i].split('=')
+                result['RecName'][parted[0]] = parted[1]
+                i += 1
+        elif parted[0].startswith('AltName: Full'):
+            if 'AltName' not in result.keys():
+                result['AltName'] = []
+            altname = {'Full': parted[1]}
+            i += 1
+            while i < len(parts) and ':' not in parts[i].split()[0]:
+                parted = parts[i].split('=')
+                altname[parted[0]] = parted[1]
+                i += 1
+            result['AltName'].append(altname)
+        elif parted[0].startswith('Contains: RecName'):
+            if 'Contains' not in result.keys():
+                result['Contains'] = []
+            contains = {'RecName': {'Full': parted[1]}}
+            i += 1
+            while i < len(parts) and ':' not in parts[i].split()[0]:
+                parted = parts[i].split('=')
+                contains['RecName'][parted[0]] = parted[1]
+                i += 1
+            result['Contains'].append(contains)
+        elif parts[i].startswith('Flags'):
+            parted = parts[i].split(': ')
+            if 'Flags' in result.keys():
+                result['Flags'] = parted[1]
+            else:
+                result['Flags'] = [parted[1]]
+            i += 1
+        else:
+            print('A description UPIMAPI cannot yet handle!')
+            print(parts[i])
+            i += 1
+    return result
+
+
+def fix_term(term):
+    return term if '{ECO:' not in term else ' '.join(term.split()[:-1])
+
+
+def parse_descriptions(sp_data):
+    desc_data_df = sp_data['description'].apply(parse_description_text)
+    description_df = pd.DataFrame()
+    description_df['Protein names'] = desc_data_df.apply(
+        lambda x: '{}{}{}{}{}{}'.format(
+            fix_term(x['RecName']['Full']), f" ({fix_term(x['RecName']['Short'])})" if 'Short' in x['RecName'].keys()
+            else "", f" (EC {fix_term(x['RecName']['EC'])})" if 'EC' in x['RecName'].keys() else "",
+            ' ' + ' '.join(' '.join([f"({fix_term(value)})" for value in altname.values()]) for altname in x['AltName'])
+            if 'AltName' in x.keys() else "",
+            f" [Cleaved into: {'; '.join([fix_term(v['RecName']['Full']) for v in x['Contains']])}]"
+            if 'Contains' in x.keys() else "",
+            ' '.join([f" ({flag})" for flag in x['Flags']]) if 'Flags' in x.keys() else ""))
+    description_df['EC number'] = desc_data_df.apply(
+        lambda x: x['RecName']['EC'].split()[0] if type(x) != float and 'RecName' in x.keys()
+        and 'EC' in x['RecName'].keys() else np.nan)
+    return description_df
+
+
+def parse_feature(feature, position, qualifiers=True, ide=True):
+    """
+    :param feature: str - the feature itself
+    :param position: str - position information
+    :param qualifiers: bool - add qualifiers information?
+    :param ide: bool - add id information?
+    :return: str - the term to add
+    """
+    result = feature.type + ' ' + position
+    if qualifiers:
+        result += '  ' + '  '.join([f'/{key}="{value}";' for key, value in feature.qualifiers.items()])
+    if ide:
+        result += '  ' + f'  /id="{feature.id}";'
+    return result
+
+
+def parse_features(sp_data):
+    feats_list = []
+    pos_funcs = {
+        'all': lambda x: f'{"?" if x.location.start.position is None else x.location.start.position + 1}..'
+                         f'{x.location.end.position};  ',
+        'end': lambda x: f'{feature.location.end.position};  '}
+    prefix2info = {
+        'VAR_SEQ': ('Alternative sequence', 'all', True, True),
+        'VARIANT': ('Natural variant', 'end', True, True),
+        'NON_CONS': ('Non-adjacent residues', 'all', True, False),
+        'NON_STD': ('Non-standard residue', 'end', True, False),
+        'NON_TER': ('Non-terminal residue', 'end', False, False),
+        'CONFLICT': ('Sequence conflict', 'all', True, False),
+        'UNSURE': ('Sequence uncertainty', 'end', True, False),
+        'ACT_SITE': ('Active site', 'end', True, False),
+        'BINDING': ('Binding site', 'end', True, False),
+        'DNA_BIND': ('DNA binding', 'all', True, False),
+        'METAL': ('Metal binding', 'end', True, False),
+        'NP_BIND': ('Nucleotide binding', 'all', True, False),
+        'SITE': ('Site', 'end', True, False),
+        'INTRAMEM': ('Intramembrane', 'all', True, False),
+        'TOPO_DOM': ('Topological domain', 'all', True, False),
+        'TRANSMEM': ('Transmembrane', 'all', True, False),
+        'CHAIN': ('Chain', 'all', True, True),
+        'CROSSLNK': ('Cross-link', 'all', True, False),
+        'DISULFID': ('Disulfide bond', 'all', True, False),
+        'CARBOHYD': ('Glycosylation', 'end', True, False),
+        'INIT_MET': ('Initiator methionine', 'end', True, False),
+        'LIPID': ('Lipidation', 'end', True, False),
+        'MOD_RES': ('Modified residue', 'end', True, False),
+        'PEPTIDE': ('Peptide', 'all', True, True),
+        'PROPEP': ('Propeptide', 'all', False, True),
+        'SIGNAL': ('Signal peptide', 'all', True, False),
+        'TRANSIT': ('Transit peptide', 'all', True, False),
+        'STRAND': ('Beta strand', 'all', True, False),
+        'HELIX': ('Helix', 'all', True, False),
+        'TURN': ('Turn', 'all', True, False),
+        'COILED': ('Coiled coil', 'all', True, False),
+        'COMPBIAS': ('Compositional bias', 'all', True, False),
+        'DOMAIN': ('Domain [FT]', 'all', True, False),
+        'MOTIF': ('Motif', 'all', True, False),
+        'REGION': ('Region', 'all', True, False),
+        'REPEAT': ('Repeat', 'all', True, False),
+        'ZN_FING': ('Zinc finger', 'all', True, False),
+        'MUTAGEN': ('Mutagenesis', 'end', True, False),
+        'CA_BIND': ('Calcium binding', 'all', True, False)}
+    count_features = {}
+    for features in sp_data['features']:
+        feats_dict = {}
+        for feature in features:
+            if feature.type in prefix2info.keys():
+                parameters = prefix2info[feature.type]
+                if parameters[0] not in feats_dict.keys():
+                    feats_dict[parameters[0]] = parse_feature(
+                    feature, pos_funcs[parameters[1]](feature), qualifiers=parameters[2], ide=parameters[3])
+                    count_features[parameters[0]] = 1
+                else:
+                    feats_dict[parameters[0]] += ' ' + parse_feature(
+                        feature, pos_funcs[parameters[1]](feature), qualifiers=parameters[2], ide=parameters[3])
+                    count_features[parameters[0]] += 1
+            else:
+                print(f'A feature UPIMAPI can yet not handle! [{feature.type}]')
+        feats_dict['Features'] = '; '.join([f'{feat_type} ({count})' for feat_type, count in count_features.items()])
+        feats_list.append(feats_dict)
+    return pd.DataFrame(feats_list)
+
+
 def parse_sp_data(sp_data, tax_tsv):
+    """
+    Parses data from local ID mapping through DAT file
+    :param sp_data: pandas.DataFrame
+    :param tax_tsv: str - filename of taxonomy in TSV format
+    :return: pandas.DataFrame - organized in same columns as data from UniProt's API
+    """
     result = pd.DataFrame()
+    timed_message('Parsing entry')
     result['Entry'] = sp_data['accessions'].apply(lambda x: x[0])
     for k, v in upmap.local2api.items():
         if v not in [None, False]:
             result[v] = sp_data[k]
-    result['Taxonomic identifier (SPECIES)'] = sp_data['taxonomy_id'].apply(lambda x: x[0] if len(x) > 0 else x)
+    result['Organism ID'] = result['Taxonomic identifier (SPECIES)'] = \
+        sp_data['taxonomy_id'].apply(lambda x: x[0] if len(x) > 0 else x)
     result['Virus hosts'] = sp_data['host_organism'].apply(lambda x: x[0] if len(x) > 0 else x)
-    result['Gene names (primary )'] = sp_data['gene_name'].apply(
-        lambda x: x.split('=')[1].split('; ')[0] if len(x) > 0 else x)
     result['Keywords'] = sp_data['keywords'].apply(';'.join)
     result['Organism'] = sp_data['organism'].str.rstrip('.')
-    result = pd.merge(result, get_taxonomy_in_columns(sp_data, tax_tsv), left_index=True, right_index=True, how='left')
+    timed_message('Parsing taxonomy (this may take a while)')
+    tax_df = parse_taxonomy(sp_data, tax_tsv).reset_index()
+    rel_df = sp_data['organism_classification'].apply(','.join)
+    tax_df['index'] = tax_df['index'].apply(','.join)
+    rel_df = pd.merge(rel_df, tax_df, left_on='organism_classification', right_on='index', how='left')
+    del rel_df['organism_classification']
+    del rel_df['index']
+    result = pd.merge(result, rel_df, left_index=True, right_index=True, how='left')
+    timed_message('Parsing genes')
+    result = pd.merge(result, parse_gene_names(sp_data), left_index=True, right_index=True, how='left')
+    timed_message('Parsing cross-references')
     result = pd.merge(result, parse_cross_references(sp_data), left_index=True, right_index=True, how='left')
+    timed_message('Parsing comments')
     result = pd.merge(result, parse_comments(sp_data), left_index=True, right_index=True, how='left')
+    timed_message('Parsing features')
+    result = pd.merge(result, parse_features(sp_data), left_index=True, right_index=True, how='left')
+    result['Gene encoded by'] = sp_data['organelle'].str.rstrip('.')
+    result['Mass'] = sp_data['seqinfo'].apply(lambda x: x[1])
     result['Date of creation'] = sp_data['created'].apply(
         lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
     result['Date of last modification'] = sp_data['annotation_update'].apply(
@@ -611,7 +885,6 @@ def parse_sp_data(sp_data, tax_tsv):
     result['Date of last sequence modification'] = sp_data['sequence_update'].apply(
         lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'))
     result['Version (sequence)'] = sp_data['sequence_update'].apply(lambda x: x[1])
-    # TODO - work gene names for columns "Gene names" and "Gene names (ORF )"
     return result
 
 
@@ -628,9 +901,10 @@ def local_id_mapping(ids, sp_dat, tax_tsv, output):
         get_sprot_dat(sp_dat)
     if not os.path.isfile(tax_tsv):
         get_tabular_taxonomy(tax_tsv)
+    print('Starting mapping')
     sp_data, ids_not_found = get_local_swissprot_data(sp_dat, ids)
-    parse_sp_data(sp_data, tax_tsv).to_csv(output, sep='\t', index=False)
-    return ids_not_found
+    sp_df = parse_sp_data(sp_data, tax_tsv).to_csv(output, sep='\t', index=False)
+    return ids_not_found, sp_df
 
 
 def get_input_type(input_ids, blast=True):
