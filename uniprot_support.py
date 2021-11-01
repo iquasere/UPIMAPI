@@ -419,18 +419,6 @@ class UniprotSupport:
             'Xenopus laevis and tropicalis biology and genomics resource': 'Xenbase',
             'Zebrafish Information Network genome database': 'ZFIN'}
 
-        self.local2api = {
-            'entry_name': 'Entry name',
-            'data_class': 'Status',
-            'molecule_type': None,          # TODO - find which one
-            'sequence_length': 'Length',
-            'description': 'Protein names',
-            'host_taxonomy_id': None,       # TODO - find which one
-            'references': None,             # TODO
-            'protein_existence': None,      # TODO - find which one
-            'seqinfo': None,                # TODO - find which one
-            'sequence': 'Sequence'
-        }
 
         self.local2api_functions = {
             'data_class': lambda x: x.lowercase(),

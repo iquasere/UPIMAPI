@@ -608,7 +608,7 @@ def parse_comments(sp_data):
             'WEB RESOURCE', 'MASS SPECTROMETRY', 'RNA EDITING', 'CATALYTIC ACTIVITY', 'COFACTOR', 'ACTIVITY REGULATION',
             'PATHWAY', 'DEVELOPMENTAL STAGE', 'INDUCTION', 'ALLERGEN', 'BIOTECHNOLOGY', 'DISRUPTION PHENOTYPE',
             'PHARMACEUTICAL', 'TOXIC DOSE', 'DOMAIN']}
-        bpc_dict = {}
+        bpc_dict = {'Kinetic parameters': []}
         for comment in comments:
             comment = comment.split(': ')
             if comment[0] in partial.keys():
@@ -665,18 +665,22 @@ def cross_references_to_columns(cross_refs):
 
 
 def parse_cross_references(sp_data):
-    ref_df = pd.DataFrame([cross_references_to_columns(cross_refs) for cross_refs in sp_data['cross_references']])
-    ref_df.columns = map(lambda x: f'Cross-references ({x})', ref_df.columns)
+    ref_result = [cross_references_to_columns(cross_refs) for cross_refs in sp_data['cross_references']]
+    ref_dict, go_dict = zip(*ref_result)
+    ref_df = pd.DataFrame(ref_dict)
+    ref_df.columns = map(lambda x: f'Cross-references ({x})' if x != 'Proteomes' else x, ref_df.columns)
+    go_df = pd.DataFrame(go_dict)
+    ref_df = pd.concat([ref_df, go_df], axis=1)
     return ref_df
 
 
 def gene_name_to_columns(genes):
-    if type(genes) == float:
+    if genes == '':
         info = {}
     else:
         info = [pair.split('=') for pair in genes.rstrip(';').split('; ')]
         info = {pair[0]: pair[1] for pair in info}
-    return {'Gene names': ' '.join(info.values()) if type(info) != float else '',
+    return {'Gene names': ' '.join(info.values()) if info != {} else '',
             'Gene names  (ordered locus )': info['OrderedLocusNames'] if 'OrderedLocusNames' in info else '',
             'Gene names  (ORF )': info['ORFNames'] if 'ORFNames' in info else '',
             'Gene names  (primary )': info['Name'] if 'Name' in info else '',
@@ -850,7 +854,14 @@ def parse_sp_data(sp_data, tax_tsv):
     result = pd.DataFrame()
     timed_message('Parsing entry')
     result['Entry'] = sp_data['accessions'].apply(lambda x: x[0])
-    for k, v in upmap.local2api.items():
+    local2api = {
+        'entry_name': 'Entry name',
+        'data_class': 'Status',
+        'sequence_length': 'Length',
+        'description': 'Protein names',
+        'sequence': 'Sequence'
+    }
+    for k, v in local2api.items():
         if v not in [None, False]:
             result[v] = sp_data[k]
     result['Organism ID'] = result['Taxonomic identifier (SPECIES)'] = \
@@ -865,15 +876,15 @@ def parse_sp_data(sp_data, tax_tsv):
     rel_df = pd.merge(rel_df, tax_df, left_on='organism_classification', right_on='index', how='left')
     del rel_df['organism_classification']
     del rel_df['index']
-    result = pd.merge(result, rel_df, left_index=True, right_index=True, how='left')
+    result = pd.concat([result, rel_df], axis=1)
     timed_message('Parsing genes')
-    result = pd.merge(result, parse_gene_names(sp_data), left_index=True, right_index=True, how='left')
+    result = pd.concat([result, parse_gene_names(sp_data)], axis=1)
     timed_message('Parsing cross-references')
-    result = pd.merge(result, parse_cross_references(sp_data), left_index=True, right_index=True, how='left')
+    result = pd.concat([result, parse_cross_references(sp_data)], axis=1)
     timed_message('Parsing comments')
-    result = pd.merge(result, parse_comments(sp_data), left_index=True, right_index=True, how='left')
+    result = pd.concat([result, parse_comments(sp_data)], axis=1)
     timed_message('Parsing features')
-    result = pd.merge(result, parse_features(sp_data), left_index=True, right_index=True, how='left')
+    result = pd.concat([result, parse_features(sp_data)], axis=1)
     result['Gene encoded by'] = sp_data['organelle'].str.rstrip('.')
     result['Mass'] = sp_data['seqinfo'].apply(lambda x: x[1])
     result['Date of creation'] = sp_data['created'].apply(
