@@ -31,7 +31,7 @@ from functools import partial
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.6.1'
+__version__ = '1.6.2'
 
 upmap = UniprotSupport()
 
@@ -39,11 +39,12 @@ upmap = UniprotSupport()
 def get_arguments():
     parser = ArgumentParser(description="UniProt Id Mapping through API",
                             epilog="A tool for retrieving information from UniProt.")
-    parser.add_argument("-i", "--input", help="""Input filename - can be:
-                            1. a file containing a list of IDs (one per line)
-                            2. a BLAST TSV result file (requires to be specified with the --blast parameter
-                            3. a protein FASTA file to be annotated (requires the --use-diamond and -db parameters)
-                            4. nothing! If so, will read input from command line, and parse as CSV (id1,id2,...)""")
+    parser.add_argument(
+        "-i", "--input", help="""Input filename - can be:
+        1. a file containing a list of IDs (one per line)
+        2. a BLAST TSV result file (requires to be specified with the --blast parameter
+        3. a protein FASTA file to be annotated (requires the --use-diamond and -db parameters)
+        4. nothing! If so, will read input from command line, and parse as CSV (id1,id2,...)""")
     parser.add_argument("-o", "--output", help="Folder to store outputs", default="UPIMAPI_output")
     parser.add_argument(
         "-ot", "--output-table",
@@ -303,7 +304,7 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, database
     ids_missing = list(set(ids) - set(ids_done))
     last_ids_missing = None
 
-    print(f'IDs present in uniprotinfo file: {len(ids_done)}')
+    print(f'IDs present in uniprotinfo file: {int(len(ids_done) / 2)}')      # entry and entry name count by 2
     print(f'IDs missing: {len(ids_missing)}')
 
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
@@ -582,9 +583,7 @@ def get_upper_taxids(taxid, tax_df):
     return taxids
 
 
-def parse_taxonomy(data, tax_tsv, threads=15):
-    tax_tsv_df = pd.read_csv(tax_tsv, sep='\t', dtype={'taxid': str, 'name': str, 'rank': str, 'parent_taxid': str})
-    tax_tsv_df = tax_tsv_df[tax_tsv_df.name.notnull()]
+def parse_taxonomy(data, tax_tsv_df, threads=15):
     tax_tsv_df.set_index('name', inplace=True)
     all_classifications = split_list(data['organism_classification'].drop_duplicates().tolist(), threads)
     with Manager() as m:
@@ -855,6 +854,8 @@ def parse_sp_data(sp_data, tax_tsv):
     :param tax_tsv: str - filename of taxonomy in TSV format
     :return: pandas.DataFrame - organized in same columns as data from UniProt's API
     """
+    tax_tsv_df = pd.read_csv(tax_tsv, sep='\t', dtype={'taxid': str, 'name': str, 'rank': str, 'parent_taxid': str})
+    tax_tsv_df = tax_tsv_df[tax_tsv_df.name.notnull()]
     result = pd.DataFrame()
     result['Entry'] = sp_data['accessions'].apply(lambda x: x[0])
     local2api = {
@@ -873,13 +874,13 @@ def parse_sp_data(sp_data, tax_tsv):
     result['Keywords'] = sp_data['keywords'].apply(';'.join)
     result['Organism'] = sp_data['organism'].str.rstrip('.')
     timed_message('Parsing taxonomy (this may take a while)')
-    tax_df = parse_taxonomy(sp_data, tax_tsv).reset_index()
+    tax_df = parse_taxonomy(sp_data, tax_tsv_df).reset_index()
     rel_df = sp_data['organism_classification'].apply(','.join)
     tax_df['index'] = tax_df['index'].apply(','.join)
     rel_df = pd.merge(rel_df, tax_df, left_on='organism_classification', right_on='index', how='left')
     del rel_df['organism_classification']
     del rel_df['index']
-    result['Virus hosts'] = parse_host_taxonomy_id(sp_data, tax_tsv)
+    result['Virus hosts'] = parse_host_taxonomy_id(sp_data, tax_tsv_df)
     result = pd.concat([result, rel_df], axis=1)
     timed_message('Parsing genes')
     result = pd.concat([result, parse_gene_names(sp_data)], axis=1)
@@ -922,8 +923,8 @@ def local_id_mapping(ids, sp_dat, tax_tsv, output):
     timed_message('Started mapping')
     sp_data, ids_not_found = get_local_swissprot_data(sp_dat, ids)
     timed_message('Parsing SwissProt data')
-    sp_df = parse_sp_data(sp_data, tax_tsv).to_csv(output, sep='\t', index=False)
-    return ids_not_found, sp_df
+    parse_sp_data(sp_data, tax_tsv).to_csv(output, sep='\t', index=False)
+    return ids_not_found
 
 
 def get_input_type(input_ids, blast=True):
@@ -934,10 +935,30 @@ def get_input_type(input_ids, blast=True):
     return input_ids, 'txt'
 
 
+def check_no_annotation(args_input, no_annotation):
+    if args_input is None:
+        is_fasta = False
+    else:
+        is_fasta = check_output(f"head -c 1 {args_input}", shell=True).decode('utf8') == '>'
+    change = False
+    if is_fasta:
+        if no_annotation:
+            change = str2bool(input(
+                'File seems to be FASTA, but you choose to not perform annotation! '
+                'Do you want to perform annotation? [Y/N] '))
+    if not is_fasta:
+        if not no_annotation:
+            change = str2bool(input(
+                'File seems to not be FASTA, but you choose to perform annotation! '
+                'Do you want to skip annotation? [Y/N] '))
+    return not no_annotation if change else no_annotation
+
+
 def upimapi():
     args = get_arguments()
     Path(args.output).mkdir(parents=True, exist_ok=True)
     Path(args.resources_directory).mkdir(parents=True, exist_ok=True)
+    args.no_annotation = check_no_annotation(args.input, args.no_annotation)
 
     # Annotation with DIAMOND
     if not args.no_annotation:
