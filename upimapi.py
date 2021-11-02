@@ -31,7 +31,7 @@ from functools import partial
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.6.0'
+__version__ = '1.6.1'
 
 upmap = UniprotSupport()
 
@@ -256,12 +256,12 @@ def uniprot_fasta_workflow(all_ids, output, max_iter=5, step=1000, sleep_time=10
         ids_done = get_fasta_ids(output)
     else:
         print(f'{output} not found. Will perform mapping for all IDs.')
-        ids_done = list()
+        ids_done = []
 
     ids_missing = list(set(all_ids) - set(ids_done))
 
     tries = 0
-    ids_done = ([ide.split('|')[1] for ide in get_fasta_ids(output)] if os.path.isfile(output) else list())
+    ids_done = ([ide.split('|')[1] for ide in get_fasta_ids(output)] if os.path.isfile(output) else [])
     while len(ids_done) < len(all_ids) and tries < max_iter:
         print('Checking which IDs are missing information.')
         ids_missing = list(set([ide for ide in tqdm(all_ids, desc='Checking which IDs are missing information.')
@@ -293,11 +293,11 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, database
         except OSError:
             print(f'{output} was found. However, it could not be parsed. Will restart mapping.')
             result = pd.DataFrame()
-            ids_done = list()
+            ids_done = []
     else:
         print(f'{output} not found or empty. Will perform mapping for all IDs.')
         result = pd.DataFrame()
-        ids_done = list()
+        ids_done = []
     tries = 0
     ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
     ids_missing = list(set(ids) - set(ids_done))
@@ -519,7 +519,7 @@ def count_on_file(expression, file, compressed=False):
 
 def get_local_swissprot_data(sp_dat_filename, ids):
     sp_dat = SP.parse(open(sp_dat_filename))
-    result = list()
+    result = []
     i = 1
     record = next(sp_dat)
     number_of_entries = count_on_file('Reviewed;', sp_dat_filename)
@@ -545,8 +545,6 @@ def lineage_to_columns(lineage, tax_tsv):
             rank, taxid = match[["rank", "taxid"]]
             if type(rank) == str:
                 l2c_result[f'Taxonomic lineage ({rank.upper()})'] = taxon
-                l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
-            else:       # name is None, but taxid is something (always?)
                 l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
         else:   # some taxIDs have multiple levels (e.g. "Craniata")
             for i in range(len(match)):
@@ -576,8 +574,8 @@ def get_upper_taxids(taxid, tax_df):
     :returns list - of upper taxIDs
     """
     if taxid == '0':
-        return list()
-    taxids = list()
+        return []
+    taxids = []
     while taxid != '1' and taxid != 'Taxon':
         taxids.append(taxid)
         taxid = tax_df.loc[taxid]['parent_taxid']
@@ -852,7 +850,6 @@ def parse_sp_data(sp_data, tax_tsv):
     :return: pandas.DataFrame - organized in same columns as data from UniProt's API
     """
     result = pd.DataFrame()
-    timed_message('Parsing entry')
     result['Entry'] = sp_data['accessions'].apply(lambda x: x[0])
     local2api = {
         'entry_name': 'Entry name',
@@ -910,11 +907,14 @@ def get_sprot_dat(sp_dat):
 
 def local_id_mapping(ids, sp_dat, tax_tsv, output):
     if not os.path.isfile(sp_dat):
+        timed_message(f'Creating {sp_dat}')
         get_sprot_dat(sp_dat)
     if not os.path.isfile(tax_tsv):
+        timed_message(f'Creating {tax_tsv}')
         get_tabular_taxonomy(tax_tsv)
-    print('Starting mapping')
+    timed_message('Started mapping')
     sp_data, ids_not_found = get_local_swissprot_data(sp_dat, ids)
+    timed_message('Parsing SwissProt data')
     sp_df = parse_sp_data(sp_data, tax_tsv).to_csv(output, sep='\t', index=False)
     return ids_not_found, sp_df
 
