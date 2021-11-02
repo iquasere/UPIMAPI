@@ -842,6 +842,12 @@ def parse_features(sp_data):
     return pd.DataFrame(feats_list)
 
 
+def parse_host_taxonomy_id(sp_data, tax_tsv):
+    tax_tsv = tax_tsv.reset_index().set_index('taxid')
+    return sp_data['host_taxonomy_id'].apply(
+        lambda x: '; '.join([f'{tax_tsv.loc[tid, "name"]} [TaxID: {tid}]' for tid in x]) if len(x) > 0 else np.nan)
+
+
 def parse_sp_data(sp_data, tax_tsv):
     """
     Parses data from local ID mapping through DAT file
@@ -873,6 +879,7 @@ def parse_sp_data(sp_data, tax_tsv):
     rel_df = pd.merge(rel_df, tax_df, left_on='organism_classification', right_on='index', how='left')
     del rel_df['organism_classification']
     del rel_df['index']
+    result['Virus hosts'] = parse_host_taxonomy_id(sp_data, tax_tsv)
     result = pd.concat([result, rel_df], axis=1)
     timed_message('Parsing genes')
     result = pd.concat([result, parse_gene_names(sp_data)], axis=1)
