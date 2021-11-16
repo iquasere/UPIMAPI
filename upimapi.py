@@ -988,12 +988,10 @@ def upimapi():
                 make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
             database = f"{'.'.join(database.split('.')[:-1])}.dmnd"
         (b, c) = block_size_and_index_chunks(argsb=args.block_size, argsc=args.index_chunks)
-        '''
         run_diamond(
             args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast', database, 
             threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c, e_value=args.evalue, 
             bit_score=args.bitscore, pident=args.pident)
-        '''
         args.input = f'{args.output}/aligned.blast'
         args.blast = True
 
