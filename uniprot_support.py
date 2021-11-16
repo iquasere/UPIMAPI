@@ -20,22 +20,17 @@ class UniprotSupport:
             'Gene names',
             'Protein names',
             'EC number',
-            'Function[CC]',
+            'Function [CC]',
             'Pathway',
             'Keywords',
             'Protein existence',
             'Gene ontology (GO)',
             'Protein families',
             'Taxonomic lineage (SUPERKINGDOM)',
-            'Taxonomic identifier (SUPERKINGDOM)',
             'Taxonomic lineage (PHYLUM)',
-            'Taxonomic identifier (PHYLUM)',
             'Taxonomic lineage (CLASS)',
-            'Taxonomic identifier (CLASS)',
             'Taxonomic lineage (ORDER)',
-            'Taxonomic identifier (ORDER)',
             'Taxonomic lineage (FAMILY)',
-            'Taxonomic identifier (FAMILY)',
             'Taxonomic lineage (GENUS)',
             'Taxonomic identifier (GENUS)',
             'Taxonomic lineage (SPECIES)',
@@ -418,13 +413,6 @@ class UniprotSupport:
             'WormBase': 'WormBase',
             'Xenopus laevis and tropicalis biology and genomics resource': 'Xenbase',
             'Zebrafish Information Network genome database': 'ZFIN'}
-
-
-        self.local2api_functions = {
-            'data_class': lambda x: x.lowercase(),
-            'created': lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d'),
-            'sequence_update': lambda x: datetime.strptime(x[0], '%d-%b-%Y').strftime('%Y-%m-%d')
-        }
 
     def get_default_columns(self):
         return self.default_columns

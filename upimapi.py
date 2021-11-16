@@ -31,7 +31,7 @@ from functools import partial
 
 from uniprot_support import UniprotSupport
 
-__version__ = '1.6.2'
+__version__ = '1.6.3'
 
 upmap = UniprotSupport()
 
@@ -40,11 +40,11 @@ def get_arguments():
     parser = ArgumentParser(description="UniProt Id Mapping through API",
                             epilog="A tool for retrieving information from UniProt.")
     parser.add_argument(
-        "-i", "--input", help="""Input filename - can be:
-        1. a file containing a list of IDs (one per line)
-        2. a BLAST TSV result file (requires to be specified with the --blast parameter
-        3. a protein FASTA file to be annotated (requires the --use-diamond and -db parameters)
-        4. nothing! If so, will read input from command line, and parse as CSV (id1,id2,...)""")
+        "-i", "--input", help="""Input filename - can be:\n
+        \t1. a file containing a list of IDs (one per line)\n
+        \t2. a BLAST TSV result file (requires to be specified with the --blast parameter\n
+        \t3. a protein FASTA file to be annotated (requires the --use-diamond and -db parameters)\n
+        \t4. nothing! If so, will read input from command line, and parse as CSV (id1,id2,...)""")
     parser.add_argument("-o", "--output", help="Folder to store outputs", default="UPIMAPI_output")
     parser.add_argument(
         "-ot", "--output-table",
@@ -66,11 +66,11 @@ def get_arguments():
     parser.add_argument(
         "--fasta", help="Output will be generated in FASTA format", action="store_true", default=False)
     parser.add_argument(
-        "--step", type=int, default=1000, help="How many IDs to submit per request to the API [1000]")
+        "--step", type=int, default=10000, help="How many IDs to submit per request to the API [10000]")
     parser.add_argument(
         "--max-tries", default=3, type=int,
-        help="How many times to try obtaining information from UniProt before giving up")
-    parser.add_argument("--sleep", default=10, type=int, help="Time between requests (in seconds) [10]")
+        help="How many times to try obtaining information from UniProt before giving up [3]")
+    parser.add_argument("--sleep", default=3, type=int, help="Time between requests (in seconds) [3]")
     parser.add_argument(
         "--no-annotation", action="store_true", default=False,
         help="Do not perform annotation - input must be in one of BLAST result or TXT IDs file or STDIN")
@@ -82,12 +82,12 @@ def get_arguments():
     diamond_args = parser.add_argument_group('DIAMOND arguments')
     diamond_args.add_argument(
         "-db", "--database", default='uniprot',
-        help="How the reference database is inputted to UPIMAPI."
-             "1. uniprot - UPIMAPI will download the entire UniProt and use it as reference"
-             "2. swissprot - UPIMAPI will download SwissProt and use it as reference"
-             "3. taxids - Reference proteomes will be downloaded for the taxa specified with the --taxids, and those "
-             "will be used as reference"
-             "4. a custom database - Input will be considered as the database, and will be used as reference")
+        help="How the reference database is inputted to UPIMAPI.\n"
+             "\t1. uniprot - UPIMAPI will download the entire UniProt and use it as reference\n"
+             "\t2. swissprot - UPIMAPI will download SwissProt and use it as reference\n"
+             "\t3. taxids - Reference proteomes will be downloaded for the taxa specified with the --taxids, and those "
+             "will be used as reference\n"
+             "\t4. a custom database - Input will be considered as the database, and will be used as reference")
     diamond_args.add_argument(
         "-t", "--threads", type=int, default=cpu_count() - 2,
         help="Number of threads to use in annotation steps [total available - 2]")
@@ -107,11 +107,9 @@ def get_arguments():
         help="Number of chunks for processing the seed index (default: auto determine best value)")
     diamond_args.add_argument(
         "--taxids", nargs="+", help="Tax IDs to obtain protein sequences of for building a reference database.")
-
     args = parser.parse_args()
     args.output = args.output.rstrip('/')
     args.resources_directory = args.resources_directory.rstrip('/')
-
     return args
 
 
@@ -284,8 +282,7 @@ def uniprot_fasta_workflow(all_ids, output, max_iter=5, step=1000, sleep_time=10
               f'available at {output}')
 
 
-def uniprot_information_workflow(ids, output, max_iter=5, columns=None, databases=None, step=1000,
-                                 sleep_time=10):
+def check_ids_already_done(output, ids):
     if os.path.isfile(output) and os.stat(output).st_size > 1:
         try:
             result = pd.read_csv(output, sep='\t', low_memory=False).drop_duplicates()
@@ -299,25 +296,26 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, database
         print(f'{output} not found or empty. Will perform mapping for all IDs.')
         result = pd.DataFrame()
         ids_done = []
-    tries = 0
-    ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
     ids_missing = list(set(ids) - set(ids_done))
-    last_ids_missing = None
-
     print(f'IDs present in uniprotinfo file: {int(len(ids_done) / 2)}')      # entry and entry name count by 2
     print(f'IDs missing: {len(ids_missing)}')
+    return ids_done, ids_missing, result
 
+
+def uniprot_information_workflow(ids, output, max_iter=5, columns=None, databases=None, step=1000, sleep_time=10):
+    ids_done, ids_missing, result = check_ids_already_done(output, ids)
+    tries = 0
+    last_ids_missing = None
+    ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
-        print(f'Information already gathered for {len(ids_done)} ids. '
-              f'Still missing for {len(ids_missing)}.')
+        print(f'Information already gathered for {len(ids_done)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
         uniprotinfo = get_uniprot_information(
             ids_missing, step=step, columns=columns, databases=databases, max_tries=max_iter, sleep_time=sleep_time)
         if len(uniprotinfo) > 0:
             ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry name'].tolist()))
             result = pd.concat([result, uniprotinfo], ignore_index=True)
-        ids_missing = list(set(ids) - set(ids_done))
-
+        ids_missing = list(set(last_ids_missing) - set(ids_done))
         if len(ids_missing) > 0:
             if last_ids_missing == ids_missing:
                 print("Could not map additional IDs for this mapping. There were probably some outdated IDs. "
@@ -325,7 +323,6 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, database
             else:
                 print('Failed to retrieve information for some IDs. Retrying request.')
                 tries += 1
-
     result.to_csv(output, sep='\t', index=False)
 
     if len(ids_missing) == 0:
@@ -355,8 +352,11 @@ def get_ids(args_input, input_type='blast', full_id='auto'):
         full_id = determine_full_id(ids)
         print(f'Auto determined "full id" as: {full_id}')
     if full_id:
-        return [ide.split('|')[1] for ide in ids if ide not in ['*', '']], full_id
-    return [ide for ide in ids if ide not in ['*', '']], full_id
+        return_ids = [ide.split('|')[1] for ide in ids if ide not in ['*', '']]
+        sp_ids = [ide.split('|')[1] for ide in ids if ide.startswith('sp')]
+        return return_ids, full_id, sp_ids
+    return_ids = [ide for ide in ids if ide not in ['*', '']]
+    return return_ids, full_id, return_ids
 
 
 def run_command(bash_command, print_message=True):
@@ -520,7 +520,7 @@ def count_on_file(expression, file, compressed=False):
 
 def get_local_swissprot_data(sp_dat_filename, ids):
     sp_dat = SP.parse(open(sp_dat_filename))
-    result = []
+    result, ids_found = [], []
     i = 1
     record = next(sp_dat)
     number_of_entries = count_on_file('Reviewed;', sp_dat_filename)
@@ -528,13 +528,13 @@ def get_local_swissprot_data(sp_dat_filename, ids):
         match_id = get_match_id(record, ids)
         if match_id is not None:
             result.append(record.__dict__)
-            ids.remove(match_id)
+            ids_found.append(match_id)
         if i % 100000 == 0:
             print(f'[{i}/{number_of_entries}] SwissProt entries queried')
         record = next(sp_dat, None)
         i += 1
     print(f'[{i}/{number_of_entries}] SwissProt entries queried')
-    return pd.DataFrame(result), ids
+    return pd.DataFrame(result), ids_found
 
 
 def lineage_to_columns(lineage, tax_tsv):
@@ -546,15 +546,15 @@ def lineage_to_columns(lineage, tax_tsv):
             rank, taxid = match[["rank", "taxid"]]
             if type(rank) == str:
                 l2c_result[f'Taxonomic lineage ({rank.upper()})'] = taxon
-                l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
+                l2c_taxids[f'Taxonomic lineage IDs ({rank.upper()})'] = taxid
         else:   # some taxIDs have multiple levels (e.g. "Craniata")
             for i in range(len(match)):
                 rank, taxid = match.iloc[i][["rank", "taxid"]]
                 if type(rank) == str:
                     l2c_result[f'Taxonomic lineage ({rank.upper()})'] = taxon
                     l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
-    l2c_result['Taxonomic lineage (ALL)'] = ', '.join(set(l2c_result.values()))
-    l2c_taxids['Taxonomic identifier (ALL)'] = ', '.join(set(l2c_taxids.values()))
+    l2c_result['Taxonomic lineage (ALL)'] = ', '.join(set(l2c_result.values()))         # TODO - is missing SPECIES?
+    l2c_taxids['Taxonomic identifier (ALL)'] = ', '.join(set(l2c_taxids.values()))      # TODO - is missing SPECIES?
     l2c_result = {**l2c_result, **l2c_taxids, 'index': lineage}
     return l2c_result
 
@@ -585,10 +585,12 @@ def get_upper_taxids(taxid, tax_df):
 
 def parse_taxonomy(data, tax_tsv_df, threads=15):
     tax_tsv_df.set_index('name', inplace=True)
+    tax_tsv_df['taxid'] = tax_tsv_df['taxid'].astype(str)
     all_classifications = split_list(data['organism_classification'].drop_duplicates().tolist(), threads)
     with Manager() as m:
         with m.Pool() as p:
-            result = p.starmap(lineages_to_columns, [(classifications, tax_tsv_df) for classifications in all_classifications])
+            result = p.starmap(lineages_to_columns, [(classifications, tax_tsv_df)
+                                                     for classifications in all_classifications])
     decompacted = []
     for res in result:
         decompacted += res
@@ -730,8 +732,8 @@ def parse_description_text(description):
                 result['Flags'] = [parted[1]]
             i += 1
         else:
-            print('A description UPIMAPI cannot yet handle!')
-            print(parts[i])
+            #print('A description UPIMAPI cannot yet handle!')      # TODO - can't parse EC numbers? And some "Includes: RecName:"
+            #print(parts[i])
             i += 1
     return result
 
@@ -847,9 +849,10 @@ def parse_host_taxonomy_id(sp_data, tax_tsv):
         lambda x: '; '.join([f'{tax_tsv.loc[tid, "name"]} [TaxID: {tid}]' for tid in x]) if len(x) > 0 else np.nan)
 
 
-def parse_sp_data(sp_data, tax_tsv):
+def parse_sp_data(sp_data, tax_tsv, threads=15):
     """
     Parses data from local ID mapping through DAT file
+    :param threads:
     :param sp_data: pandas.DataFrame
     :param tax_tsv: str - filename of taxonomy in TSV format
     :return: pandas.DataFrame - organized in same columns as data from UniProt's API
@@ -862,7 +865,6 @@ def parse_sp_data(sp_data, tax_tsv):
         'entry_name': 'Entry name',
         'data_class': 'Status',
         'sequence_length': 'Length',
-        'description': 'Protein names',
         'sequence': 'Sequence'
     }
     for k, v in local2api.items():
@@ -873,8 +875,9 @@ def parse_sp_data(sp_data, tax_tsv):
     result['Virus hosts'] = sp_data['host_organism'].apply(lambda x: x[0] if len(x) > 0 else x)
     result['Keywords'] = sp_data['keywords'].apply(';'.join)
     result['Organism'] = sp_data['organism'].str.rstrip('.')
+    result['Taxonomic lineage (SPECIES)'] = result['Organism'].apply(lambda x: ' '.join(x.split()[:2]))
     timed_message('Parsing taxonomy (this may take a while)')
-    tax_df = parse_taxonomy(sp_data, tax_tsv_df).reset_index()
+    tax_df = parse_taxonomy(sp_data, tax_tsv_df, threads=threads).reset_index()
     rel_df = sp_data['organism_classification'].apply(','.join)
     tax_df['index'] = tax_df['index'].apply(','.join)
     rel_df = pd.merge(rel_df, tax_df, left_on='organism_classification', right_on='index', how='left')
@@ -890,6 +893,7 @@ def parse_sp_data(sp_data, tax_tsv):
     result = pd.concat([result, parse_comments(sp_data)], axis=1)
     timed_message('Parsing features')
     result = pd.concat([result, parse_features(sp_data)], axis=1)
+    result = pd.concat([result, parse_descriptions(sp_data)], axis=1)
     result['Gene encoded by'] = sp_data['organelle'].str.rstrip('.')
     result['Mass'] = sp_data['seqinfo'].apply(lambda x: x[1])
     result['Date of creation'] = sp_data['created'].apply(
@@ -913,18 +917,24 @@ def get_sprot_dat(sp_dat):
         f.write(r.content)
 
 
-def local_id_mapping(ids, sp_dat, tax_tsv, output):
+def local_id_mapping(ids, sp_dat, tax_tsv, output, columns=None, databases=None, threads=15):
+    ids_done, ids_missing, result = check_ids_already_done(output, ids)
+    if len(ids_missing) == 0:
+        return set()
     if not os.path.isfile(sp_dat):
         timed_message(f'Creating {sp_dat}')
         get_sprot_dat(sp_dat)
     if not os.path.isfile(tax_tsv):
         timed_message(f'Creating {tax_tsv}')
         get_tabular_taxonomy(tax_tsv)
-    timed_message('Started mapping')
-    sp_data, ids_not_found = get_local_swissprot_data(sp_dat, ids)
-    timed_message('Parsing SwissProt data')
-    parse_sp_data(sp_data, tax_tsv).to_csv(output, sep='\t', index=False)
-    return ids_not_found
+    timed_message('Searching for IDs in SwissProt DAT')
+    sp_data, ids_found = get_local_swissprot_data(sp_dat, ids_missing)
+    timed_message('Parsing SwissProt resuls')
+    sp_parsed = parse_sp_data(sp_data, tax_tsv, threads=threads)
+    columns = [col for col in columns if col in sp_parsed.columns.tolist()]
+    databases = [db for db in databases if db in sp_parsed.columns.tolist()]
+    sp_parsed[columns + databases].to_csv(output, sep='\t', index=False)
+    return ids_found
 
 
 def get_input_type(input_ids, blast=True):
@@ -978,18 +988,20 @@ def upimapi():
                 make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
             database = f"{'.'.join(database.split('.')[:-1])}.dmnd"
         (b, c) = block_size_and_index_chunks(argsb=args.block_size, argsc=args.index_chunks)
-
+        '''
         run_diamond(
-            args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast',
-            database, threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c,
-            e_value=args.evalue, bit_score=args.bitscore, pident=args.pident)
+            args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast', database, 
+            threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c, e_value=args.evalue, 
+            bit_score=args.bitscore, pident=args.pident)
+        '''
         args.input = f'{args.output}/aligned.blast'
         args.blast = True
 
+    timed_message('ID mapping has begun')
     args_input, input_type = get_input_type(args.input, blast=args.blast)
 
     # Get the IDs
-    ids, full_id = get_ids(args_input, input_type=input_type, full_id=args.full_id)
+    ids, full_id, sp_ids = get_ids(args_input, input_type=input_type, full_id=args.full_id)
 
     # Get UniProt information
     if not args.fasta:
@@ -1011,9 +1023,9 @@ def upimapi():
 
         # ID mapping through local information
         if not args.no_local_mapping:
-            ids = local_id_mapping(
-                ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
-                table_output)
+            ids = set(ids) - set(local_id_mapping(
+                sp_ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
+                table_output, columns=args.columns, databases=args.databases, threads=15))
 
         # ID mapping through API
         uniprot_information_workflow(
