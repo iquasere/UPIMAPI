@@ -667,7 +667,7 @@ def parse_cross_references(sp_data):
     ref_result = [cross_references_to_columns(cross_refs) for cross_refs in sp_data['cross_references']]
     ref_dict, go_dict = zip(*ref_result)
     ref_df = pd.DataFrame(ref_dict)
-    ref_df.columns = map(lambda x: f'Cross-references ({x})' if x != 'Proteomes' else x, ref_df.columns)
+    ref_df.columns = map(lambda x: f'Cross-reference ({x})' if x != 'Proteomes' else x, ref_df.columns)
     go_df = pd.DataFrame(go_dict)
     ref_df = pd.concat([ref_df, go_df], axis=1)
     return ref_df
@@ -931,9 +931,10 @@ def local_id_mapping(ids, sp_dat, tax_tsv, output, columns=None, databases=None,
     sp_data, ids_found = get_local_swissprot_data(sp_dat, ids_missing)
     timed_message('Parsing SwissProt resuls')
     sp_parsed = parse_sp_data(sp_data, tax_tsv, threads=threads)
-    columns = [col for col in columns if col in sp_parsed.columns.tolist()]
-    databases = [db for db in databases if db in sp_parsed.columns.tolist()]
-    sp_parsed[columns + databases].to_csv(output, sep='\t', index=False)
+    result = pd.concat([result, sp_parsed])
+    columns = [col for col in columns if col in result.columns.tolist()]
+    databases = [db for db in databases if db in result.columns.tolist()]
+    result[columns + databases].to_csv(output, sep='\t', index=False)
     return ids_found
 
 
@@ -989,8 +990,8 @@ def upimapi():
             database = f"{'.'.join(database.split('.')[:-1])}.dmnd"
         (b, c) = block_size_and_index_chunks(argsb=args.block_size, argsc=args.index_chunks)
         run_diamond(
-            args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast', database, 
-            threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c, e_value=args.evalue, 
+            args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast', database,
+            threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c, e_value=args.evalue,
             bit_score=args.bitscore, pident=args.pident)
         args.input = f'{args.output}/aligned.blast'
         args.blast = True
