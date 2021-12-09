@@ -140,7 +140,7 @@ def parse_blast(blast):
 def get_uniprot_columns():
     text = requests.get('https://www.uniprot.org/help/uniprotkb_column_names').text
     matches = re.finditer('<tr><td>(.*)<\/td><td>(.*)<\/td><\/tr>', text, re.MULTILINE)
-    return {match.group(1): match.group(2) for match in matches}
+    return {match.group(1).replace('[', ' ['): match.group(2) for match in matches}
 
 
 def get_uniprot_databases():
