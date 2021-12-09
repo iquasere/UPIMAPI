@@ -53,7 +53,7 @@ jobs:
         run: docker run upimapi /bin/bash -c "ls"
 
       - name: IDs inputted through TXT file
-        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ids.txt -rd resources_directory"
+        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.txt -rd resources_directory --no-annotation"
 
       - name: ID mapping without SwissProt mapping
         run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.txt -rd resources_directory --no-local-mapping --no-annotation"

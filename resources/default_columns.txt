@@ -1,0 +1,20 @@
+Entry
+Entry name
+Gene names
+Protein names
+EC number
+Function [CC]
+Pathway
+Keywords
+Protein existence
+Gene ontology (GO)
+Protein families
+Taxonomic lineage (SUPERKINGDOM)
+Taxonomic lineage (PHYLUM)
+Taxonomic lineage (CLASS)
+Taxonomic lineage (ORDER)
+Taxonomic lineage (FAMILY)
+Taxonomic lineage (GENUS)
+Taxonomic identifier (GENUS)
+Taxonomic lineage (SPECIES)
+Taxonomic identifier (SPECIES)

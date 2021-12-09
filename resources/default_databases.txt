@@ -1,0 +1,12 @@
+BioCyc Collection of Pathway/Genome Databases
+BRENDA Comprehensive Enzyme Information System
+Conserved Domains Database
+evolutionary genealogy of genes: Non-supervised Orthologous Groups
+Ensembl eukaryotic genome annotation project
+Integrated resource of protein families, domains and functional sites
+KEGG: Kyoto Encyclopedia of Genes and Genomes
+KEGG Orthology (KO)
+Pfam protein domain database
+Reactome - a knowledgebase of biological pathways and processes
+NCBI Reference Sequences
+UniPathway: a resource for the exploration and annotation of metabolic pathways

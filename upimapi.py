@@ -9,6 +9,7 @@ Mar 2020
 
 from argparse import ArgumentParser, ArgumentTypeError
 import os
+import sys
 from time import strftime, gmtime, time, sleep
 import urllib.error
 import urllib.parse
@@ -28,12 +29,9 @@ from datetime import datetime
 from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
+import re
 
-from uniprot_support import UniprotSupport
-
-__version__ = '1.6.2'
-
-upmap = UniprotSupport()
+__version__ = '1.6.3'
 
 
 def get_arguments():
@@ -139,6 +137,32 @@ def parse_blast(blast):
     return result
 
 
+def get_uniprot_columns():
+    text = requests.get('https://www.uniprot.org/help/uniprotkb_column_names').text
+    matches = re.finditer('<tr><td>(.*)<\/td><td>(.*)<\/td><\/tr>', text, re.MULTILINE)
+    return {match.group(1): match.group(2) for match in matches}
+
+
+def get_uniprot_databases():
+    text = requests.get('https://www.uniprot.org/docs/dbxref.txt').text
+    matches = re.finditer('Abbrev: (.*)\nName  : (.*)', text, re.MULTILINE)
+    return {match.group(2): match.group(1) for match in matches}
+
+
+def string4mapping(columns=None, databases=None):
+    if columns is None and databases is None:   # if no columns or databases are inputted, UPIMAPI uses all
+        with open(f'{sys.path[0]}/default_columns.txt') as f:
+            columns = f.read().splitlines()
+        with open(f'{sys.path[0]}/default_databases.txt') as f:
+            databases = f.read().splitlines()
+    columns_dict = get_uniprot_columns()
+    databases_dict = get_uniprot_databases()
+    result = ','.join([columns_dict[column] for column in columns])
+    if len(databases) > 0:
+        result += ',' + ','.join([f'database({databases_dict[db]})' for db in databases])
+    return result
+
+
 def parallelize(data, func, num_of_processes=8):
     data_split = np.array_split(data, num_of_processes)
     pool = Pool(num_of_processes)
@@ -176,7 +200,7 @@ def uniprot_request(ids, original_database='ACC+ID', database_destination='',
         'from': original_database,
         'format': output_format,
         'query': ' '.join(ids),
-        'columns': upmap.string4mapping(columns=columns, databases=databases)
+        'columns': string4mapping(columns=columns, databases=databases)
     }
 
     if database_destination == '' or original_database == 'ACC+ID':
@@ -345,7 +369,7 @@ def get_ids(args_input, input_type='blast', full_id='auto'):
     if input_type == 'blast':
         ids = parse_blast(args_input)['sseqid']
     elif input_type == 'txt':
-        ids = open(args_input).read().split('\n')
+        ids = open(args_input).read().split(',')
     else:
         ids = args_input.split(',')
     if full_id == 'auto':
@@ -538,15 +562,14 @@ def get_local_swissprot_data(sp_dat_filename, ids):
 
 
 def lineage_to_columns(lineage, tax_tsv):
-    l2c_result = {}
-    l2c_taxids = {}
+    l2c_result, l2c_taxids = {}, {}
     for taxon in lineage:
         match = tax_tsv.loc[taxon, ["rank", "taxid"]]
         if type(match) == pd.core.series.Series:
             rank, taxid = match[["rank", "taxid"]]
             if type(rank) == str:
                 l2c_result[f'Taxonomic lineage ({rank.upper()})'] = taxon
-                l2c_taxids[f'Taxonomic lineage IDs ({rank.upper()})'] = taxid
+                l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
         else:   # some taxIDs have multiple levels (e.g. "Craniata")
             for i in range(len(match)):
                 rank, taxid = match.iloc[i][["rank", "taxid"]]
@@ -857,6 +880,8 @@ def parse_sp_data(sp_data, tax_tsv, threads=15):
     :param tax_tsv: str - filename of taxonomy in TSV format
     :return: pandas.DataFrame - organized in same columns as data from UniProt's API
     """
+    if len(sp_data) == 0:
+        return pd.DataFrame()
     tax_tsv_df = pd.read_csv(tax_tsv, sep='\t', dtype={'taxid': str, 'name': str, 'rank': str, 'parent_taxid': str})
     tax_tsv_df = tax_tsv_df[tax_tsv_df.name.notnull()]
     result = pd.DataFrame()
@@ -910,11 +935,10 @@ def parse_sp_data(sp_data, tax_tsv, threads=15):
 
 
 def get_sprot_dat(sp_dat):
-    r = requests.get(
-        'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot.dat.gz',
-        allow_redirects=True)
-    with open(sp_dat, 'wb') as f:
-        f.write(r.content)
+    run_command(
+        f'wget https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/'
+        f'uniprot_sprot.dat.gz -O {sp_dat}.gz')
+    run_command(f'gunzip {sp_dat}.gz')
 
 
 def local_id_mapping(ids, sp_dat, tax_tsv, output, columns=None, databases=None, threads=15):
