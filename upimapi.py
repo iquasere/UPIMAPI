@@ -1030,12 +1030,8 @@ def upimapi():
     if not args.fasta:
         if args.columns is not None:
             args.columns = args.columns.split('&')
-        else:
-            args.columns = upmap.get_default_columns()
         if args.databases is not None:
             args.databases = args.databases.split('&')
-        else:
-            args.databases = upmap.get_default_databases()
 
         if args.output_table:
             table_output = args.output_table

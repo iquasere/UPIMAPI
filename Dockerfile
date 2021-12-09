@@ -4,7 +4,6 @@ RUN buildDeps='build-essential zlib1g-dev' \
 && apt-get update \
 && apt-get install -y $buildDeps --no-install-recommends \
 && rm -rf /var/lib/apt/lists/* \
-&& conda config --add channels bioconda \
 && git clone https://github.com/iquasere/UPIMAPI.git \
 && conda install -c conda-forge -y mamba \
 && mamba env update --file UPIMAPI/envs/environment.yml --name base \
