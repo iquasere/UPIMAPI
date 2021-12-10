@@ -104,10 +104,12 @@ def get_arguments():
         "-c", "--index-chunks", type=int,
         help="Number of chunks for processing the seed index (default: auto determine best value)")
     diamond_args.add_argument(
-        "--taxids", nargs="+", help="Tax IDs to obtain protein sequences of for building a reference database.")
+        "--taxids", default=None, help="Tax IDs to obtain protein sequences of for building a reference database.")
     args = parser.parse_args()
     args.output = args.output.rstrip('/')
     args.resources_directory = args.resources_directory.rstrip('/')
+    if args.taxids is not None:
+        args.taxids = args.taxids.split(',')
     return args
 
 
@@ -1030,8 +1032,14 @@ def upimapi():
     if not args.fasta:
         if args.columns is not None:
             args.columns = args.columns.split('&')
+        else:
+            with open(f'{sys.path[0]}/default_columns.txt') as f:
+                args.columns = f.read().splitlines()
         if args.databases is not None:
             args.databases = args.databases.split('&')
+        else:
+            with open(f'{sys.path[0]}/default_databases.txt') as f:
+                args.databases = f.read().splitlines()
 
         if args.output_table:
             table_output = args.output_table
