@@ -31,7 +31,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.6.3'
+__version__ = '1.6.4'
 
 
 def get_arguments():
@@ -73,8 +73,8 @@ def get_arguments():
         "--no-annotation", action="store_true", default=False,
         help="Do not perform annotation - input must be in one of BLAST result or TXT IDs file or STDIN")
     parser.add_argument(
-        "--no-local-mapping", action="store_true", default=False,
-        help="Do not perform local ID mapping of SwissProt IDs. Advisable if none or few IDs of SwissProt are present.")
+        "--local-id-mapping", action="store_true", default=False,
+        help="Perform local ID mapping of SwissProt IDs. Advisable if many IDs of SwissProt are present.")
     parser.add_argument('-v', '--version', action='version', version=f'UPIMAPI {__version__}')
 
     diamond_args = parser.add_argument_group('DIAMOND arguments')
@@ -1049,7 +1049,7 @@ def upimapi():
             table_output = f'{args.output}/uniprotinfo.tsv'
 
         # ID mapping through local information
-        if not args.no_local_mapping:
+        if args.local_id_mapping:
             ids = set(ids) - set(local_id_mapping(
                 sp_ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
                 table_output, columns=args.columns, databases=args.databases, threads=15))

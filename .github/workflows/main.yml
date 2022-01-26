@@ -53,16 +53,16 @@ jobs:
         run: docker run upimapi /bin/bash -c "ls"
 
       - name: IDs inputted through TXT file
-        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.txt -rd resources_directory --no-annotation --no-local-mapping"
-
-      - name: ID mapping with SwissProt mapping
         run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.txt -rd resources_directory --no-annotation"
 
+      - name: ID mapping with SwissProt mapping
+        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.txt -rd resources_directory --no-annotation --local-id-mapping"
+
       - name: IDs inputted through BLAST file
-        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.blast -rd resources_directory --no-annotation --no-local-mapping --blast"
+        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.blast -rd resources_directory --no-annotation --blast"
 
       - name: Obtain FASTA sequences
-        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.txt -rd resources_directory --no-annotation --no-local-mapping --fasta"
+        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.txt -rd resources_directory --no-annotation --fasta"
 
       - name: Full workflow, TaxIDs DB at Family level
-        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/proteomes.fasta -rd resources_directory -db taxids --taxids 196137,143067,2159,213465,213422,213421,68298  --no-local-mapping"
+        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/proteomes.fasta -rd resources_directory -db taxids --taxids 196137,143067,2159,213465,213422,213421,68298"
