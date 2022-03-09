@@ -31,7 +31,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.6.4'
+__version__ = '1.7.0'
 
 
 def get_arguments():
@@ -142,7 +142,7 @@ def parse_blast(blast):
 def get_uniprot_columns():
     text = requests.get('https://www.uniprot.org/help/uniprotkb_column_names').text
     matches = re.finditer('<tr><td>(.*)<\/td><td>(.*)<\/td><\/tr>', text, re.MULTILINE)
-    return {match.group(1).replace('[', ' ['): match.group(2) for match in matches}
+    return {match.group(1): match.group(2) for match in matches}
 
 
 def get_uniprot_databases():
@@ -428,8 +428,7 @@ def run_diamond(query, aligned, unaligned, database, threads=12, max_target_seqs
                 bit_score=None, pident=None):
     command = (
         f"diamond blastp --query {query} --out {aligned} --un {unaligned} --db {database} --outfmt 6 --unal 1 "
-        f"--threads {threads} --max-target-seqs {max_target_seqs} -b {b} -c {c} --evalue {e_value} --very-sensitive"
-    )
+        f"--threads {threads} --max-target-seqs {max_target_seqs} -b {b} -c {c} --evalue {e_value} --very-sensitive")
     if bit_score:
         command += f' --min-score {bit_score}'
     if pident:
@@ -991,6 +990,42 @@ def check_no_annotation(args_input, no_annotation):
     return not no_annotation if change else no_annotation
 
 
+def blast_consensus(alignment_file):
+    blast = parse_blast(alignment_file)
+    query_to_ref, ref_to_query, res = {}, {}, {}
+    with open(alignment_file) as file:
+        line = file.readline()
+        while line:
+            line = line.strip('\n').split('\t')
+            query_seq, ref_seq, evalue = line[0], line[1], float(line[-2])
+            if query_seq not in query_to_ref:
+                if ref_seq not in ref_to_query:
+                    query_to_ref[query_seq] = {'ref_seq': ref_seq, 'evalue': evalue}
+                    ref_to_query[ref_seq] = {'query_seq': query_seq, 'evalue': evalue}
+                else:
+                    if ref_to_query[ref_seq]['evalue'] > evalue:
+                        ref_to_query[ref_seq] = {'query_seq': query_seq, 'evalue': evalue}
+                        query_to_ref[query_seq] = {'ref_seq': ref_seq, 'evalue': evalue}
+            else:
+                if ref_seq not in ref_to_query:
+                    if query_to_ref[query_seq]['evalue'] > evalue:
+                        ref_to_query[ref_seq] = {'query_seq': query_seq, 'evalue': evalue}
+                        query_to_ref[query_seq] = {'ref_seq': ref_seq, 'evalue': evalue}
+                else:
+                    if ref_to_query[ref_seq]['evalue'] > evalue:
+                        if query_to_ref[query_seq]['evalue'] > evalue:
+                            ref_to_query[ref_seq] = {'query_seq': query_seq, 'evalue': evalue}
+                            query_to_ref[query_seq] = {'ref_seq': ref_seq, 'evalue': evalue}
+            line = file.readline()
+    for query_seq in query_to_ref:
+        ref_seq = query_to_ref[query_seq]['ref_seq']
+        if query_seq == ref_to_query[ref_seq]['query_seq']:
+            res[query_seq] = query_to_ref[query_seq]['ref_seq']
+        res = pd.DataFrame.from_dict(res, orient='index').reset_index()
+    res.columns = ['qseqid', 'sseqid']
+    return blast.set_index(['qseqid', 'sseqid']).loc[res.set_index(['qseqid', 'sseqid']).index].reset_index()
+
+
 def upimapi():
     args = get_arguments()
     Path(args.output).mkdir(parents=True, exist_ok=True)
@@ -1019,6 +1054,9 @@ def upimapi():
             args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast', database,
             threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c, e_value=args.evalue,
             bit_score=args.bitscore, pident=args.pident)
+        if args.max_target_seqs > 1:
+            blast_consensus(f'{args.output}/aligned.blast').to_csv(
+                f'{args.output}/consensus.blast', sep='\t', index=False)
         args.input = f'{args.output}/aligned.blast'
         args.blast = True
 
