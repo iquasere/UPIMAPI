@@ -75,6 +75,9 @@ def get_arguments():
     parser.add_argument(
         "--local-id-mapping", action="store_true", default=False,
         help="Perform local ID mapping of SwissProt IDs. Advisable if many IDs of SwissProt are present.")
+    parser.add_argument(
+        "--skip-db-check", action="store_true", default=False,
+        help="So UPIMAPI doesn't check for (FASTA) database existence.")
     parser.add_argument('-v', '--version', action='version', version=f'UPIMAPI {__version__}')
 
     diamond_args = parser.add_argument_group('DIAMOND arguments')
@@ -1042,9 +1045,10 @@ def upimapi():
         else:
             database = args.database
 
-        if must_build_database(args.database, args.resources_directory):
-            build_reference_database(
-                args.database, args.resources_directory, taxids=args.taxids, max_tries=args.max_tries)
+        if not args.skip_db_check:
+            if must_build_database(args.database, args.resources_directory):
+                build_reference_database(
+                    args.database, args.resources_directory, taxids=args.taxids, max_tries=args.max_tries)
         if not database.endswith(".dmnd"):
             if not os.path.isfile(f"{'.'.join(database.split('.')[:-1])}.dmnd"):
                 make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
