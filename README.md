@@ -12,6 +12,7 @@ UPIMAPI also allows to first perform annotation with DIAMOND, connecting its pow
 3. [Information retrieval from UniProt](https://github.com/iquasere/UPIMAPI#information-retrieval-from-uniprot)
 4. [Output](https://github.com/iquasere/UPIMAPI#output)
 5. [Additional parameters](https://github.com/iquasere/UPIMAPI#additional-parameters)
+6. [Referencing UPIMAPI](https://github.com/iquasere/UPIMAPI#referencing-upimapi)
 
 ## Installing UPIMAPI
 
