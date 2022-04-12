@@ -13,7 +13,7 @@ UPIMAPI also allows to first perform annotation with DIAMOND, connecting its pow
 4. [Output](https://github.com/iquasere/UPIMAPI#output)
 5. [Additional parameters](https://github.com/iquasere/UPIMAPI#additional-parameters)
 
-## 1. Installing UPIMAPI
+## Installing UPIMAPI
 
 To install UPIMAPI through Bioconda, run
 ```
@@ -24,7 +24,7 @@ To check if it was installed correctly, run
 upimapi.py --version
 ```
 
-## 2. Annotation with UPIMAPI
+## Annotation with UPIMAPI
 
 UPIMAPI can be used to perform homology-based annotation with DIAMOND. Main advantages of using UPIMAPI are that it determines optimal values for the most important search parameters, and directly links annotation to UniProt ID mapping.
 To annotate protein sequences and get information from UniProt, UPIMAPI can be run as
@@ -36,14 +36,14 @@ where:
 * ```output_directory``` can be any folder, existent or not, and
 * ```database.fasta``` is the filename of the reference database
 
-### 2.1. Reference database
+### Reference database
 
 Several points to take notice about the reference database:
 * It must be either UniProt or a subsection of it (e.g. SwissProt, or all proteins of a specific taxon). UPIMAPI performs ID mapping with UniProt IDs, so the database must have those;
 * It can be supplied in either FASTA (.fasta) or DIAMOND (.dmnd) format. If in FASTA, UPIMAPI will create a new database in DIAMOND format for annotation;
 * There are four different ways to input reference databases to UPIMAPI:
 
-#### 2.1.1. Use the entire UniProt (or just SwissProt)
+#### Use the entire UniProt (or just SwissProt)
 
 Using the UniProt database is a valid choice if the case study is a metagenome with a mostly unknown community composition.
 
@@ -51,7 +51,7 @@ To use the entire UniProt database as reference for UPIMAPI, specify the databas
 
 If alternatively you only want to use SwissProt (the manually curated part of UniProt), specify the database as ```--database swissprot```.
 
-#### 2.1.2. Input tax IDs to build a more specific database
+#### Input tax IDs to build a more specific database
 
 If, for both pure and mixed cultures, the taxonomic composition is known, UPIMAPI can build a database with the reference proteomes of the known taxa. 
 
@@ -63,9 +63,9 @@ A custom database can be inputted if, for example, there is only interest in ann
 
 To input a custom database into UPIMAPI, specify it as ```--database path/to/database.fasta```.
 
-## 3. Information retrieval from UniProt
+## Information retrieval from UniProt
 
-### 3.1. Columns and databases of information from UniProt
+### Columns and databases of information from UniProt
 
 UniProt provides information for many different fields of information and cross-references. For the user's convenience, a default selection is provided:
 * **default columns:** ```Entry```, ```Entry name```, ```Gene names```, ```Protein names```, ```EC number```, ```Function[CC]```, ```Pathway```, ```Keywords```, ```Protein existence```, ```Gene ontology (GO)```, ```Protein families```, ```Taxonomic lineage (SUPERKINGDOM)```, ```Taxonomic lineage (PHYLUM)```, ```Taxonomic lineage (CLASS)```, ```Taxonomic lineage (ORDER)```, ```Taxonomic lineage (FAMILY)```, ```Taxonomic lineage (GENUS)```, ```Taxonomic lineage (SPECIES)```
@@ -78,18 +78,18 @@ If another selection of columns/databases is desired, it can be specified, for e
 ```
 where ```--columns``` and ```--databases``` take as input the names of the [columns](https://www.uniprot.org/help/uniprotkb_column_names) and [databases](https://www.uniprot.org/docs/dbxref) required, respectively. The links provided take to the pages of UniProt where the possible columns and databases values are listed.
 
-## 3.2. ID mapping without annotation
+## ID mapping without annotation
 
 If only retrieval of information from UniProt is required (no annotation step), IDs can be inputted to UPIMAPI directly through several different inputs.
 
-### 3.2.1. Annotation BLAST file
+### Annotation BLAST file
 
 The result of an annotation with some database with UniProt IDs can be directy inputted for ID mapping with the command
 ```
 upimapi.py -i aligned.blast -o output_directory --blast
 ```
 
-### 3.2.2. CSV file
+### CSV file
 
 A CSV file with UniProt IDs (separated by commas) can be inputted to UPIMAPI with the command
 ```
@@ -97,7 +97,7 @@ upimapi.py -i ids.txt -o output_directory
 ```
 This repo provides an [example](https://github.com/iquasere/UPIMAPI/blob/master/ids.txt) of this file.
 
-### 3.2.3. Directly from the command line
+### Directly from the command line
 
 IDs can also be directly inputted through the command line by not specifying an input. They must be inputted as a comma separated value:
 ```
@@ -106,7 +106,7 @@ IDs can also be directly inputted through the command line by not specifying an 
 IDs to perform mapping on (comma separated values):
 ```
 
-## 4. Output
+## Output
 
 Information obtained with UPIMAPI can come in two forms:
 1. The **Base** (default) workflow obtains information for the list of columns and databases inputted. It produces the following outputs, in the output folder:
@@ -115,7 +115,7 @@ Information obtained with UPIMAPI can come in two forms:
 
 2. The **Fasta** workflow, specified with the ```--fasta``` argument, results in a FASTA file with the protein sequences correspondent to the inputted IDs
 
-## 5. Additional parameters
+## Additional parameters
 
 ```
 optional arguments:
@@ -176,3 +176,7 @@ DIAMOND arguments:
                         Number of chunks for processing the seed index
                         (default: auto determine best value)
 ```
+
+## Referencing UPIMAPI
+
+If you use UPIMAPI, please cite its [publication](https://www.sciencedirect.com/science/article/pii/S2001037022001179).
