@@ -31,7 +31,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.7.0'
+__version__ = '1.7.1'
 
 
 def get_arguments():
@@ -58,11 +58,11 @@ def get_arguments():
         help="List of databases to cross-check with UniProt information (separated by &)")
     parser.add_argument(
         "--blast", action="store_true", default=False,
-        help="If input file is in BLAST TSV format (will consider one ID per line if not set)")
+        help="If input file is in BLAST TSV format (will consider one ID per line if not set) [false]")
     parser.add_argument(
-        "--full-id", type=str2bool, default="auto", help="If IDs in database are in 'full' format: tr|XXX|XXX")
+        "--full-id", type=str2bool, default="auto", help="If IDs in database are in 'full' format: tr|XXX|XXX [auto]")
     parser.add_argument(
-        "--fasta", help="Output will be generated in FASTA format", action="store_true", default=False)
+        "--fasta", help="Output will be generated in FASTA format [false]", action="store_true", default=False)
     parser.add_argument(
         "--step", type=int, default=10000, help="How many IDs to submit per request to the API [10000]")
     parser.add_argument(
@@ -71,13 +71,16 @@ def get_arguments():
     parser.add_argument("--sleep", default=3, type=int, help="Time between requests (in seconds) [3]")
     parser.add_argument(
         "--no-annotation", action="store_true", default=False,
-        help="Do not perform annotation - input must be in one of BLAST result or TXT IDs file or STDIN")
+        help="Do not perform annotation - input must be in one of BLAST result or TXT IDs file or STDIN [false]")
     parser.add_argument(
         "--local-id-mapping", action="store_true", default=False,
-        help="Perform local ID mapping of SwissProt IDs. Advisable if many IDs of SwissProt are present.")
+        help="Perform local ID mapping of SwissProt IDs. Advisable if many IDs of SwissProt are present [false]")
+    parser.add_argument(
+        "--skip-id-mapping", action="store_true", default=False,
+        help="If true, UPIMAPI will not perform ID mapping [false]")
     parser.add_argument(
         "--skip-db-check", action="store_true", default=False,
-        help="So UPIMAPI doesn't check for (FASTA) database existence.")
+        help="So UPIMAPI doesn't check for (FASTA) database existence [false]")
     parser.add_argument('-v', '--version', action='version', version=f'UPIMAPI {__version__}')
 
     diamond_args = parser.add_argument_group('DIAMOND arguments')
@@ -118,6 +121,13 @@ def get_arguments():
 
 def timed_message(message):
     print(f'{strftime("%Y-%m-%d %H:%M:%S", gmtime())}: {message}')
+
+
+def human_time(seconds):
+    days = seconds // 86400
+    if days > 0:
+        return strftime(f"{days}d%Hh%Mm%Ss", gmtime(seconds))
+    return strftime("%Hh%Mm%Ss", gmtime(seconds))
 
 
 def str2bool(v):
@@ -1070,6 +1080,9 @@ def upimapi():
     # Get the IDs
     ids, full_id, sp_ids = get_ids(args_input, input_type=input_type, full_id=args.full_id)
 
+    if args.skip_id_mapping:
+        return
+
     # Get UniProt information
     if not args.fasta:
         if args.columns is not None:
@@ -1114,4 +1127,4 @@ def upimapi():
 if __name__ == '__main__':
     start_time = time()
     upimapi()
-    timed_message(f'UPIMAPI analysis finished in {strftime("%Hh%Mm%Ss", gmtime(time() - start_time))}')
+    timed_message(f'UPIMAPI analysis finished in {human_time(time() - start_time)}')
