@@ -102,7 +102,8 @@ def get_arguments():
     diamond_args.add_argument(
         "--bitscore", type=float, default=None, help="Minimum bit score to report annotations for (overrides e-value).")
     diamond_args.add_argument(
-        "-mts", "--max-target-seqs", default=1, help="Number of annotations to output per sequence inputed [1]")
+        "-mts", "--max-target-seqs", type=int, default=1,
+        help="Number of annotations to output per sequence inputed [1]")
     diamond_args.add_argument(
         "-b", "--block-size", type=int,
         help="Billions of sequence letters to be processed at a time (default: auto determine best value)")
