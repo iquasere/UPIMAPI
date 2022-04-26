@@ -31,7 +31,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.7.2'
+__version__ = '1.7.3'
 
 
 def get_arguments():
@@ -39,7 +39,7 @@ def get_arguments():
                             epilog="A tool for retrieving information from UniProt.")
     parser.add_argument(
         "-i", "--input", help="""Input filename - can be:\n
-        \t1. a file containing a list of IDs (one per line)\n
+        \t1. a file containing a list of IDs (comma-separated values, no spaces)\n
         \t2. a BLAST TSV result file (requires to be specified with the --blast parameter\n
         \t3. a protein FASTA file to be annotated (requires the --use-diamond and -db parameters)\n
         \t4. nothing! If so, will read input from command line, and parse as CSV (id1,id2,...)""")
