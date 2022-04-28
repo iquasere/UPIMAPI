@@ -31,7 +31,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.7.3'
+__version__ = '1.7.4'
 
 
 def get_arguments():
@@ -1035,7 +1035,7 @@ def blast_consensus(alignment_file):
         ref_seq = query_to_ref[query_seq]['ref_seq']
         if query_seq == ref_to_query[ref_seq]['query_seq']:
             res[query_seq] = query_to_ref[query_seq]['ref_seq']
-        res = pd.DataFrame.from_dict(res, orient='index').reset_index()
+    res = pd.DataFrame.from_dict(res, orient='index').reset_index()
     res.columns = ['qseqid', 'sseqid']
     return blast.set_index(['qseqid', 'sseqid']).loc[res.set_index(['qseqid', 'sseqid']).index].reset_index()
 
@@ -1075,7 +1075,7 @@ def upimapi():
         args.input = f'{args.output}/aligned.blast'
         args.blast = True
 
-    timed_message('ID mapping has begun')
+    timed_message('ID mapping has begun.')
     args_input, input_type = get_input_type(args.input, blast=args.blast)
 
     # Get the IDs
