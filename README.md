@@ -30,12 +30,12 @@ upimapi.py --version
 UPIMAPI can be used to perform homology-based annotation with DIAMOND. Main advantages of using UPIMAPI are that it determines optimal values for the most important search parameters, and directly links annotation to UniProt ID mapping.
 To annotate protein sequences and get information from UniProt, UPIMAPI can be run as
 ```
-upimapi.py -i sequences.fasta -o output_directory --use-diamond -db database.fasta -t threads
+upimapi.py -i path/to/sequences.fasta -o path/to/output_directory -db database -t threads
 ```
 where:
 * ```sequences.fasta``` is a FASTA file with aminoacid sequences of query proteins
-* ```output_directory``` can be any folder, existent or not, and
-* ```database.fasta``` is the filename of the reference database
+* ```output_directory``` can be any folder, existent or not
+* ```database``` can be either "uniprot" (default), "swissprot", "taxids" or the filename of a FASTA file with the reference sequences (see below).
 
 ### Reference database
 
@@ -58,7 +58,7 @@ If, for both pure and mixed cultures, the taxonomic composition is known, UPIMAP
 
 To build a reference for specific taxa, specify the database as ```--database taxids```, and the tax IDs as ```--tax-ids taxid1 taxid2 taxid3 ...```.
 
-#### 2.1.3. Input a custom database
+#### Input a custom database
 
 A custom database can be inputted if, for example, there is only interest in annotating proteins of a specific family (e.g. hydrogenases). Such a database must be manually built from UniProt.
 
