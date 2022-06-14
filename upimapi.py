@@ -1120,7 +1120,8 @@ def upimapi():
             if full_id:
                 blast.sseqid = [ide.split('|')[1] if ide not in ['*',''] else ide for ide in blast.sseqid]
             result = pd.merge(blast, pd.read_csv(table_output, sep='\t'), left_on='sseqid', right_on='Entry')
-            result.groupby(['qseqid', 'pident']).to_csv(f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
+            result.sort_values(by=['qseqid', 'pident'], ascending=False).to_csv(
+                f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
         uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
 
