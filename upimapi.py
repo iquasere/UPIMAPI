@@ -31,7 +31,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.7.5'
+__version__ = '1.8.0'
 
 
 def get_arguments():
@@ -450,15 +450,33 @@ def run_diamond(query, aligned, unaligned, database, threads=12, max_target_seqs
     run_command(command)
 
 
+def get_proteome_for_taxid_slow(taxid, max_tries=3):
+    tries = 0
+    res = requests.get(f'https://rest.uniprot.org/uniprotkb/search?format=fasta&query=%28taxonomy_id%3A{taxid}%29')
+    result = res.content.decode('utf8')
+    pages = 0
+    while tries < max_tries and res.links != {}:
+        try:
+            res = requests.get(res.links['next']['url'])
+            result += res.content.decode('utf8')
+            pages += 1
+            print(pages)
+        except:
+            tries += 1
+            sleep(10)
+    return result
+
+
 def get_proteome_for_taxid(taxid, max_tries=3):
     tries = 0
-    res = None
     done = False
     while tries < max_tries and not done:
         try:
-            res = requests.get(f'https://www.uniprot.org/uniprot/?query=taxonomy:{taxid}&format=fasta')
+            res = requests.get(
+                f'https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=%28taxonomy_id%3A{taxid}%29')
             done = True
-        except ConnectionError:
+        except:
+            print(f'Failed! {max_tries - tries} tries remaining.')
             tries += 1
             sleep(10)
     return res.content.decode('utf8')
@@ -1120,7 +1138,7 @@ def upimapi():
             if full_id:
                 blast.sseqid = [ide.split('|')[1] if ide not in ['*',''] else ide for ide in blast.sseqid]
             result = pd.merge(blast, pd.read_csv(table_output, sep='\t'), left_on='sseqid', right_on='Entry')
-            result.sort_values(by=['qseqid', 'pident'], ascending=False).to_csv(
+            result.sort_values(by=['qseqid', 'evalue'], ascending=False).to_csv(
                 f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
         uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
