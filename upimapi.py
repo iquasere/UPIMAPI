@@ -15,6 +15,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from subprocess import run, Popen, PIPE, check_output
+from lxml import html
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
 
 import requests
 from psutil import virtual_memory
@@ -32,6 +35,9 @@ from functools import partial
 import re
 
 __version__ = '1.8.0'
+
+firefox_options = Options()
+firefox_options.add_argument("--headless")
 
 
 def get_arguments():
@@ -154,13 +160,24 @@ def parse_blast(blast):
 
 
 def get_uniprot_columns():
-    text = requests.get('https://www.uniprot.org/help/uniprotkb_column_names').text
-    matches = re.finditer('<tr><td>(.*)<\/td><td>(.*)<\/td><\/tr>', text, re.MULTILINE)
-    return {match.group(1): match.group(2) for match in matches}
+    print('Updating UniProt columns options')
+    driver = webdriver.Firefox(options=firefox_options)
+    driver.get('https://www.uniprot.org/help/uniprotkb_column_names')
+    tree = html.fromstring(driver.page_source)
+    tables = tree.getchildren()[1].getchildren()[0].getchildren()[0].getchildren()[2].getchildren()[0].getchildren(
+        )[0].getchildren()[1].getchildren()[0].getchildren()[0].getchildren()[0].findall('table')
+    result = {}
+    for table in tables[:-1]:
+        rows = table.getchildren()[1].getchildren()
+        for row in rows:
+            k, v = row.getchildren()
+            result[k.text] = v.text
+    return result
 
 
 def get_uniprot_databases():
-    text = requests.get('https://www.uniprot.org/docs/dbxref.txt').text
+    text = requests.get(
+        'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/docs/dbxref.txt').text
     matches = re.finditer('Abbrev: (.*)\nName  : (.*)', text, re.MULTILINE)
     return {match.group(2): match.group(1) for match in matches}
 
@@ -305,7 +322,7 @@ def uniprot_fasta_workflow(all_ids, output, max_iter=5, step=1000, sleep_time=10
         print('Checking which IDs are missing information.')
         ids_missing = list(set([ide for ide in tqdm(all_ids, desc='Checking which IDs are missing information.')
                                 if ide not in ids_done]))
-        print(f'Information already gathered for {len(ids_done)} ids. Still missing for {len(ids_missing)}.')
+        print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         uniprotinfo = get_uniprot_fasta(ids_missing, step=step, sleep_time=sleep_time)
         with open(output, 'a') as file:
             file.write(uniprotinfo)
@@ -348,7 +365,7 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, database
     last_ids_missing = None
     ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
-        print(f'Information already gathered for {len(ids_done)} ids. Still missing for {len(ids_missing)}.')
+        print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
         uniprotinfo = get_uniprot_information(
             ids_missing, step=step, columns=columns, databases=databases, max_tries=max_iter, sleep_time=sleep_time)
