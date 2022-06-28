@@ -13,3 +13,4 @@ dependencies:
     - selenium
     - firefox
     - lxml
+    - geckodriver

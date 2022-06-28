@@ -26,6 +26,7 @@ requirements:
     - selenium
     - firefox
     - lxml
+    - geckodriver
 
 test:
   commands:
