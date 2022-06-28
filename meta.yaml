@@ -1,5 +1,5 @@
 {% set name = "upimapi" %}
-{% set version = "1.6.3" %}
+{% set version = "1.8.0" %}
 {% set sha256 = "e5eda4953af1bbb20c7a4dc79bb8975603bd0cac666218cdc753f8cf3f9ca716" %}
 
 package:
@@ -17,12 +17,15 @@ build:
 
 requirements:
   run:
-    - pandas <=1.3.0
+    - pandas
     - diamond
     - psutil
     - tqdm
     - requests
-    - biopython =1.78
+    - biopython
+    - selenium
+    - firefox
+    - lxml
 
 test:
   commands:
