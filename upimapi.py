@@ -6,26 +6,21 @@ By João Sequeira
 
 Mar 2020
 """
-import json
+
 from argparse import ArgumentParser, ArgumentTypeError
 import os
 import sys
 from time import strftime, gmtime, time, sleep
-import urllib.error
-import urllib.parse
-import urllib.request
 from subprocess import run, Popen, PIPE, check_output
 import yaml
 from lxml import html
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
-
 import requests
 from psutil import virtual_memory
 from pathlib import Path
 from multiprocessing import cpu_count, Pool, Manager
 from io import StringIO
-
 import pandas as pd
 import xml.etree.ElementTree as ET
 from tqdm import tqdm
@@ -199,14 +194,11 @@ def string4mapping(columns=None, databases=None):
             columns = f.read().splitlines()
         with open(f'{sys.path[0]}/default_databases.txt') as f:
             databases = f.read().splitlines()
-        cols = [columns_dict[column] for column in columns if not column.startswith('Taxonomic')]   # TODO - one day, UniProt will allow this again
-        dbs = [f'database({databases_dict[db]})' for db in databases]
     else:
-        cols, dbs = [], []
-        if columns is not None:
-            cols = [columns_dict[column] for column in columns]
-        if databases is not None:
-            dbs = [f'database({databases_dict[db]})' for db in databases]
+        columns = [] if columns is None else columns
+        databases = [] if databases is None else databases
+    cols = [columns_dict[column] for column in columns if not column.startswith('Taxonomic')]
+    dbs = [f'database({databases_dict[db]})' for db in databases]
     dbs = []      # TODO - wait for the time databases will again be allowed
     return ','.join(cols + dbs)
 
@@ -306,10 +298,6 @@ def get_uniprot_information(ids, step=1000, sleep_time=30, columns=None, databas
                 data = uniprot_request(ids[i:j], columns=columns, databases=databases)
                 if len(data) > 0:
                     uniprotinfo = pd.read_csv(StringIO(data), sep='\t')
-                    k = (len(uniprotinfo.columns) - (30 if (
-                            len(columns + databases) == 0 or (columns == [''] and databases == [''])
-                    ) else (len(columns) + len(databases))))  # Removes the "yourlist:" and "isomap:" columns
-                    uniprotinfo = uniprotinfo[uniprotinfo.columns.tolist()[:-k]]
                     result = pd.concat([result, uniprotinfo[uniprotinfo.columns.tolist()]])
                 sleep(sleep_time)
                 done = True
@@ -379,7 +367,7 @@ def check_ids_already_done(output, ids):
         try:
             result = pd.read_csv(output, sep='\t', low_memory=False).drop_duplicates()
             print(f'{output} was found. Will perform mapping for the remaining IDs.')
-            ids_done = list(set(result['Entry'].tolist() + result['Entry name'].tolist()))
+            ids_done = list(set(result['Entry'].tolist() + result['Entry Name'].tolist()))
         except OSError:
             print(f'{output} was found. However, it could not be parsed. Will restart mapping.')
             result = pd.DataFrame()
@@ -405,7 +393,9 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, database
         uniprotinfo = get_uniprot_information(
             ids_missing, step=step, columns=columns, databases=databases, max_tries=max_iter, sleep_time=sleep_time)
         if len(uniprotinfo) > 0:
-            ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry name'].tolist()))
+            print(uniprotinfo)
+            print(uniprotinfo.columns.tolist())
+            ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry Name'].tolist()))
             result = pd.concat([result, uniprotinfo], ignore_index=True)
         ids_missing = list(set(last_ids_missing) - set(ids_done))
         if len(ids_missing) > 0:
@@ -416,7 +406,6 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, database
                 print('Failed to retrieve information for some IDs. Retrying request.')
                 tries += 1
     result.to_csv(output, sep='\t', index=False)
-
     if len(ids_missing) == 0:
         print(f'Results for all IDs are available at {output}')
     else:
