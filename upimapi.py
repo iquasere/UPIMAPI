@@ -41,6 +41,10 @@ firefox_options = Options()
 firefox_options.add_argument("--headless")
 
 
+def load_api_info():
+    return yaml.safe_load(requests.get('https://rest.uniprot.org/docs/uniprot-openapi3.yaml').text)
+
+
 def get_uniprot_columns():
     print('Updating UniProt columns options')
     driver = webdriver.Firefox(options=firefox_options)
@@ -65,6 +69,7 @@ def get_uniprot_databases():
     return {match.group(2): match.group(1) for match in matches}
 
 
+api_info = load_api_info()
 columns_dict = get_uniprot_columns()
 databases_dict = get_uniprot_databases()
 
@@ -231,7 +236,7 @@ def get_url(url, **kwargs):
     return response
 
 
-def uniprot_request(ids, api_info, columns=None, databases=None, output_format='tsv'):
+def uniprot_request(ids, columns=None, databases=None, output_format='tsv'):
     """
     Input:
         ids: list of UniProt IDs to query
@@ -249,20 +254,17 @@ def uniprot_request(ids, api_info, columns=None, databases=None, output_format='
         f"{string4mapping(columns=columns, databases=databases)}&format={output_format}")
     return resp.text
 
-'''
-POLLING_INTERVAL = 3
-API_URL = "https://rest.uniprot.org"
-
 
 def submit_id_mapping(fromDB, toDB, ids):
-    r = requests.post(f"{API_URL}/idmapping/run", data={"from": fromDB, "to": toDB, "ids": ids})
+    r = requests.post(f"{api_info['servers'][0]['url']}/idmapping/run", data={"from": fromDB, "to": toDB, "ids": ids})
     r.raise_for_status()
     return r.json()["jobId"]
 
 
 def get_id_mapping_results(job_id):
+    POLLING_INTERVAL = 3
     while True:
-        r = requests.get(f"{API_URL}/idmapping/status/{job_id}")
+        r = requests.get(f"{api_info['servers'][0]['url']}/idmapping/status/{job_id}")
         r.raise_for_status()
         job = r.json()
         if "jobStatus" in job:
@@ -275,14 +277,13 @@ def get_id_mapping_results(job_id):
             return job
 
 
-job_id = submit_id_mapping(
-    fromDB="UniProtKB_AC-ID", toDB="UniProtKB", ids=["P05067", "P12345"]
-)
-results = get_id_mapping_results(job_id)
-print(json.dumps(results, indent=2))
-'''
+def get_valid_entries(ids):
+    job_id = submit_id_mapping(fromDB="UniProtKB_AC-ID", toDB="UniProtKB", ids=ids)
+    results = get_id_mapping_results(job_id)
+    return [r["from"] for r in results["results"] if '_' not in r["from"]]
 
-def get_uniprot_information(ids, api_info, step=1000, sleep_time=30, columns=None, databases=None, max_tries=3):
+
+def get_uniprot_information(ids, step=1000, sleep_time=30, columns=None, databases=None, max_tries=3):
     """
     Input:
         ids: list of UniProt IDs to query
@@ -302,7 +303,7 @@ def get_uniprot_information(ids, api_info, step=1000, sleep_time=30, columns=Non
         j = min(i + step, len(ids))
         while not done and tries < max_tries:
             try:
-                data = uniprot_request(ids[i:j], api_info, columns=columns, databases=databases)
+                data = uniprot_request(ids[i:j], columns=columns, databases=databases)
                 if len(data) > 0:
                     uniprotinfo = pd.read_csv(StringIO(data), sep='\t')
                     k = (len(uniprotinfo.columns) - (30 if (
@@ -319,7 +320,7 @@ def get_uniprot_information(ids, api_info, step=1000, sleep_time=30, columns=Non
     return result
 
 
-def get_uniprot_fasta(ids, api_info, step=1000, sleep_time=30):
+def get_uniprot_fasta(ids, step=1000, sleep_time=30):
     """
     Input:
         ids: list of UniProt IDs to query
@@ -333,14 +334,14 @@ def get_uniprot_fasta(ids, api_info, step=1000, sleep_time=30):
     result = str()
     for i in tqdm(range(0, len(ids), step), desc="UniProt ID mapping"):
         j = min(i + step, len(ids))
-        data = uniprot_request(ids[i:j], api_info, output_format='fasta')
+        data = uniprot_request(ids[i:j], output_format='fasta')
         if len(data) > 0:
             result += data
         sleep(sleep_time)
     return result
 
 
-def uniprot_fasta_workflow(all_ids, output, api_info, max_iter=5, step=1000, sleep_time=10):
+def uniprot_fasta_workflow(all_ids, output, max_iter=5, step=1000, sleep_time=10):
     if os.path.isfile(output):
         print(f'{output} was found. Will perform mapping for the remaining IDs.')
         ids_done = get_fasta_ids(output)
@@ -357,7 +358,7 @@ def uniprot_fasta_workflow(all_ids, output, api_info, max_iter=5, step=1000, sle
         ids_missing = list(set([ide for ide in tqdm(all_ids, desc='Checking which IDs are missing information.')
                                 if ide not in ids_done]))
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
-        uniprotinfo = get_uniprot_fasta(ids_missing, api_info, step=step, sleep_time=sleep_time)
+        uniprotinfo = get_uniprot_fasta(ids_missing, step=step, sleep_time=sleep_time)
         with open(output, 'a') as file:
             file.write(uniprotinfo)
         ids_done = [ide.split('|')[1] for ide in get_fasta_ids(output)]
@@ -393,8 +394,7 @@ def check_ids_already_done(output, ids):
     return ids_done, ids_missing, result
 
 
-def uniprot_information_workflow(
-        ids, output, api_info, max_iter=5, columns=None, databases=None, step=1000, sleep_time=10):
+def uniprot_information_workflow(ids, output, max_iter=5, columns=None, databases=None, step=1000, sleep_time=10):
     ids_done, ids_missing, result = check_ids_already_done(output, ids)
     tries = 0
     last_ids_missing = None
@@ -403,8 +403,7 @@ def uniprot_information_workflow(
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
         uniprotinfo = get_uniprot_information(
-            ids_missing, api_info, step=step, columns=columns, databases=databases, max_tries=max_iter,
-            sleep_time=sleep_time)
+            ids_missing, step=step, columns=columns, databases=databases, max_tries=max_iter, sleep_time=sleep_time)
         if len(uniprotinfo) > 0:
             ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry name'].tolist()))
             result = pd.concat([result, uniprotinfo], ignore_index=True)
@@ -1110,15 +1109,6 @@ def blast_consensus(alignment_file):
     return blast.set_index(['qseqid', 'sseqid']).loc[res.set_index(['qseqid', 'sseqid']).index].reset_index()
 
 
-def load_api_info(resources_dir):
-    if not os.path.isfile(f'{resources_dir}/uniprot-openapi3.yaml'):
-        r = requests.get('https://rest.uniprot.org/docs/uniprot-openapi3.yaml')
-        with open(f'{resources_dir}/uniprot-openapi3.yaml', 'wb') as f:
-            f.write(r.content)
-    with open(f'{resources_dir}/uniprot-openapi3.yaml') as stream:
-        return yaml.safe_load(stream)
-
-
 def upimapi():
     args = get_arguments()
     Path(args.output).mkdir(parents=True, exist_ok=True)
@@ -1163,8 +1153,6 @@ def upimapi():
     # Get the IDs
     ids, full_id, sp_ids = get_ids(args_input, input_type=input_type, full_id=args.full_id)
 
-    api_info = load_api_info(args.resources_directory)
-
     # Get UniProt information
     if not args.fasta:
         if args.columns is not None:
@@ -1191,9 +1179,11 @@ def upimapi():
                 sp_ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
+        ids = get_valid_entries(ids)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
+
         # ID mapping through API
         uniprot_information_workflow(
-            ids, table_output, api_info, columns=args.columns, databases=args.databases, step=args.step,
+            ids, table_output, columns=args.columns, databases=args.databases, step=args.step,
             max_iter=args.max_tries, sleep_time=args.sleep)
 
         if not args.no_annotation:
@@ -1204,7 +1194,7 @@ def upimapi():
             result.sort_values(by=['qseqid', 'evalue'], ascending=False).to_csv(
                 f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
-        uniprot_fasta_workflow(ids, api_info, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
+        uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
 
 
 if __name__ == '__main__':
