@@ -6,7 +6,7 @@ By João Sequeira
 
 Mar 2020
 """
-
+import json
 from argparse import ArgumentParser, ArgumentTypeError
 import os
 import sys
@@ -39,6 +39,34 @@ __version__ = '1.8.0'
 
 firefox_options = Options()
 firefox_options.add_argument("--headless")
+
+
+def get_uniprot_columns():
+    print('Updating UniProt columns options')
+    driver = webdriver.Firefox(options=firefox_options)
+    driver.get('https://www.uniprot.org/help/return_fields')
+    tree = html.fromstring(driver.page_source)
+    tables = tree.getchildren()[1].getchildren()[0].getchildren()[0].getchildren()[2].getchildren()[0].getchildren(
+        )[0].getchildren()[1].getchildren()[0].getchildren()[0].getchildren()[0].findall('table')
+    result = {}
+    for table in tables:
+        rows = table.getchildren()[1].getchildren()
+        for row in rows:
+            k, l, v = row.getchildren()     # l is for legacy
+            result[k.text] = v.text
+    result = {k: v for k, v in result.items() if v != '<does not exist>'}
+    return result
+
+
+def get_uniprot_databases():
+    text = requests.get(
+        'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/docs/dbxref.txt').text
+    matches = re.finditer('Abbrev: (.*)\nName  : (.*)', text, re.MULTILINE)
+    return {match.group(2): match.group(1) for match in matches}
+
+
+columns_dict = get_uniprot_columns()
+databases_dict = get_uniprot_databases()
 
 
 def get_arguments():
@@ -160,42 +188,22 @@ def parse_blast(blast):
     return result
 
 
-def get_uniprot_columns():
-    print('Updating UniProt columns options')
-    driver = webdriver.Firefox(options=firefox_options)
-    driver.get('https://www.uniprot.org/help/return_fields')
-    tree = html.fromstring(driver.page_source)
-    tables = tree.getchildren()[1].getchildren()[0].getchildren()[0].getchildren()[2].getchildren()[0].getchildren(
-        )[0].getchildren()[1].getchildren()[0].getchildren()[0].getchildren()[0].findall('table')
-    result = {}
-    for table in tables:
-        rows = table.getchildren()[1].getchildren()
-        for row in rows:
-            k, l, v = row.getchildren()     # l is for legacy
-            result[k.text] = v.text
-    result = {k: v for k, v in result.items() if v != '<does not exist>'}
-    return result
-
-
-def get_uniprot_databases():
-    text = requests.get(
-        'https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/complete/docs/dbxref.txt').text
-    matches = re.finditer('Abbrev: (.*)\nName  : (.*)', text, re.MULTILINE)
-    return {match.group(2): match.group(1) for match in matches}
-
-
 def string4mapping(columns=None, databases=None):
     if columns is None and databases is None:   # if no columns or databases are inputted, UPIMAPI uses defaults
         with open(f'{sys.path[0]}/default_columns.txt') as f:
             columns = f.read().splitlines()
         with open(f'{sys.path[0]}/default_databases.txt') as f:
             databases = f.read().splitlines()
-    columns_dict = get_uniprot_columns()
-    databases_dict = get_uniprot_databases()
-    result = ','.join([columns_dict[column] for column in columns])
-    if len(databases) > 0:
-        result += ',' + ','.join([f'database({databases_dict[db]})' for db in databases])
-    return result
+        cols = [columns_dict[column] for column in columns if not column.startswith('Taxonomic')]   # TODO - one day, UniProt will allow this again
+        dbs = [f'database({databases_dict[db]})' for db in databases]
+    else:
+        cols, dbs = [], []
+        if columns is not None:
+            cols = [columns_dict[column] for column in columns]
+        if databases is not None:
+            dbs = [f'database({databases_dict[db]})' for db in databases]
+    dbs = []      # TODO - wait for the time databases will again be allowed
+    return ','.join(cols + dbs)
 
 
 def parallelize(data, func, num_of_processes=8):
@@ -218,13 +226,12 @@ def parallelize_on_rows(data, func, num_of_processes=8, **kwargs):
 def get_url(url, **kwargs):
     response = requests.get(url, **kwargs)
     if not response.ok:
-        print(response.txt)
         response.raise_for_status()
-        sys.exit()
+        sys.exit(response.txt)
     return response
 
 
-def uniprot_request(ids, api_info, output_format='tsv'):
+def uniprot_request(ids, api_info, columns=None, databases=None, output_format='tsv'):
     """
     Input:
         ids: list of UniProt IDs to query
@@ -238,14 +245,42 @@ def uniprot_request(ids, api_info, output_format='tsv'):
     """
     WEBSITE_API = api_info['servers'][0]['url']
     resp = get_url(
-        f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}&fields=id,accession,length,ft_site"
-        f"&format={output_format}")
+        f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}&fields="
+        f"{string4mapping(columns=columns, databases=databases)}&format={output_format}")
+    return resp.text
 
-    data = urllib.parse.urlencode(params).encode()
-    req = urllib.request.Request(base_url, data)
-    response = urllib.request.urlopen(req)
-    return response.read().decode("utf-8")
+'''
+POLLING_INTERVAL = 3
+API_URL = "https://rest.uniprot.org"
 
+
+def submit_id_mapping(fromDB, toDB, ids):
+    r = requests.post(f"{API_URL}/idmapping/run", data={"from": fromDB, "to": toDB, "ids": ids})
+    r.raise_for_status()
+    return r.json()["jobId"]
+
+
+def get_id_mapping_results(job_id):
+    while True:
+        r = requests.get(f"{API_URL}/idmapping/status/{job_id}")
+        r.raise_for_status()
+        job = r.json()
+        if "jobStatus" in job:
+            if job["jobStatus"] == "RUNNING":
+                print(f"Retrying in {POLLING_INTERVAL}s")
+                time.sleep(POLLING_INTERVAL)
+            else:
+                raise Exception(job["jobStatus"])
+        else:
+            return job
+
+
+job_id = submit_id_mapping(
+    fromDB="UniProtKB_AC-ID", toDB="UniProtKB", ids=["P05067", "P12345"]
+)
+results = get_id_mapping_results(job_id)
+print(json.dumps(results, indent=2))
+'''
 
 def get_uniprot_information(ids, api_info, step=1000, sleep_time=30, columns=None, databases=None, max_tries=3):
     """
@@ -478,7 +513,6 @@ def get_proteome_for_taxid_slow(taxid, max_tries=3):
             res = requests.get(res.links['next']['url'])
             result += res.content.decode('utf8')
             pages += 1
-            print(pages)
         except:
             tries += 1
             sleep(10)
