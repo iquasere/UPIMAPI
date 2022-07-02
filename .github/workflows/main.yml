@@ -55,8 +55,8 @@ jobs:
       - name: IDs inputted through TXT file
         run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation"
 
-      - name: ID mapping with SwissProt mapping
-        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation --local-id-mapping"
+      #- name: ID mapping with SwissProt mapping
+      #  run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation --local-id-mapping"
 
       - name: IDs inputted through BLAST file
         run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.blast -rd resources_directory --no-annotation --blast"
