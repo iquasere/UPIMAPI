@@ -66,7 +66,7 @@ def get_uniprot_databases():
 
 api_info = load_api_info()
 columns_dict = get_uniprot_columns()
-databases_dict = get_uniprot_databases()
+#databases_dict = get_uniprot_databases()
 
 
 def get_arguments():
@@ -198,8 +198,8 @@ def string4mapping(columns=None, databases=None):
         columns = [] if columns is None else columns
         databases = [] if databases is None else databases
     cols = [columns_dict[column] for column in columns if not column.startswith('Taxonomic')]
-    dbs = [f'database({databases_dict[db]})' for db in databases]
-    dbs = []      # TODO - wait for the time databases will again be allowed
+    #dbs = [f'database({databases_dict[db]})' for db in databases] # TODO - wait for the time databases will again be allowed
+    dbs = []
     return ','.join(cols + dbs)
 
 
@@ -262,7 +262,7 @@ def get_id_mapping_results(job_id):
         if "jobStatus" in job:
             if job["jobStatus"] == "RUNNING":
                 print(f"Retrying in {POLLING_INTERVAL}s")
-                time.sleep(POLLING_INTERVAL)
+                sleep(POLLING_INTERVAL)
             else:
                 raise Exception(job["jobStatus"])
         else:
@@ -1183,6 +1183,7 @@ def upimapi():
             result.sort_values(by=['qseqid', 'evalue'], ascending=False).to_csv(
                 f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
+        ids = get_valid_entries(ids)
         uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
 
 
