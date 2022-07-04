@@ -30,7 +30,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.8.0'
+__version__ = '1.8.1'
 
 firefox_options = Options()
 firefox_options.add_argument("--headless")
@@ -66,7 +66,7 @@ def get_uniprot_databases():
 
 api_info = load_api_info()
 columns_dict = get_uniprot_columns()
-#databases_dict = get_uniprot_databases()
+databases_dict = get_uniprot_databases()
 
 
 def get_arguments():
@@ -113,6 +113,9 @@ def get_arguments():
     parser.add_argument(
         "--skip-id-mapping", action="store_true", default=False,
         help="If true, UPIMAPI will not perform ID mapping [false]")
+    parser.add_argument(
+        "--skip-id-checking", action="store_true", default=False,
+        help="If true, UPIMAPI will not check if IDs are valid before mapping [false]")
     parser.add_argument(
         "--skip-db-check", action="store_true", default=False,
         help="So UPIMAPI doesn't check for (FASTA) database existence [false]")
@@ -198,8 +201,7 @@ def string4mapping(columns=None, databases=None):
         columns = [] if columns is None else columns
         databases = [] if databases is None else databases
     cols = [columns_dict[column] for column in columns if not column.startswith('Taxonomic')]
-    #dbs = [f'database({databases_dict[db]})' for db in databases] # TODO - wait for the time databases will again be allowed
-    dbs = []
+    dbs = [f'xref_{databases_dict[db].lower()}' for db in databases]
     return ','.join(cols + dbs)
 
 
@@ -261,7 +263,7 @@ def get_id_mapping_results(job_id):
         job = r.json()
         if "jobStatus" in job:
             if job["jobStatus"] == "RUNNING":
-                print(f"Retrying in {POLLING_INTERVAL}s")
+                #print(f"Retrying in {POLLING_INTERVAL}s")
                 sleep(POLLING_INTERVAL)
             else:
                 raise Exception(job["jobStatus"])
@@ -273,6 +275,22 @@ def get_valid_entries(ids):
     job_id = submit_id_mapping(fromDB="UniProtKB_AC-ID", toDB="UniProtKB", ids=ids)
     results = get_id_mapping_results(job_id)
     return [r["from"] for r in results["results"] if '_' not in r["from"]]
+
+
+def get_all_valid_entries(ids):
+    valid_ids = []
+    for i in tqdm(range(0, len(ids), 25), desc='Finding valid UniProt IDs for ID mapping'):
+        if i % 1000 == 0:
+            sleep(5)
+        j = min(i + 25, len(ids))
+        done = False
+        while not done:
+            try:
+                valid_ids += get_valid_entries(ids[i:j])
+                done = True
+            except:
+                sleep(3)
+    return valid_ids
 
 
 def get_uniprot_information(ids, step=1000, sleep_time=30, columns=None, databases=None, max_tries=3):
@@ -289,7 +307,7 @@ def get_uniprot_information(ids, step=1000, sleep_time=30, columns=None, databas
         pd.DataFrame will be returned with the information about the IDs queried.
     """
     result = pd.DataFrame()
-    for i in tqdm(range(0, len(ids), step), desc=f'Retrieving UniProt information from {str(len(ids))} IDs'):
+    for i in tqdm(range(0, len(ids), step), desc=f'Retrieving UniProt information from {len(ids)} IDs'):
         tries = 0
         done = False
         j = min(i + step, len(ids))
@@ -393,8 +411,6 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, database
         uniprotinfo = get_uniprot_information(
             ids_missing, step=step, columns=columns, databases=databases, max_tries=max_iter, sleep_time=sleep_time)
         if len(uniprotinfo) > 0:
-            print(uniprotinfo)
-            print(uniprotinfo.columns.tolist())
             ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry Name'].tolist()))
             result = pd.concat([result, uniprotinfo], ignore_index=True)
         ids_missing = list(set(last_ids_missing) - set(ids_done))
@@ -1168,7 +1184,8 @@ def upimapi():
                 sp_ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
-        ids = get_valid_entries(ids)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
+        if not args.skip_id_checking:
+            ids = get_all_valid_entries(ids)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
 
         # ID mapping through API
         uniprot_information_workflow(
@@ -1183,7 +1200,8 @@ def upimapi():
             result.sort_values(by=['qseqid', 'evalue'], ascending=False).to_csv(
                 f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
-        ids = get_valid_entries(ids)
+        if not args.skip_id_checking:
+            ids = get_all_valid_entries(ids)
         uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
 
 

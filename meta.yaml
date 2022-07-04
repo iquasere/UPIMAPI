@@ -13,7 +13,7 @@ source:
 build:
   noarch: generic
   number: 0
-  script: |
+  script: >
     mkdir -p $PREFIX/share && cp upimapi.py $PREFIX/share && cp resources/* $PREFIX/share &&
     chmod +x $PREFIX/share/upimap.py && ln -s $PREFIX/share/upimapi.py ${PREFIX}/bin &&
     apt-get install -y packagekit-gtk3-module libasound2 libdbus-glib-1-2 libx11-xcb1
