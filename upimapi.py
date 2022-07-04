@@ -54,6 +54,7 @@ def get_uniprot_columns():
             k, l, v = row.getchildren()     # l is for legacy
             result[k.text] = v.text
     result = {k: v for k, v in result.items() if v != '<does not exist>'}
+    driver.quit()
     return result
 
 
@@ -99,7 +100,7 @@ def get_arguments():
     parser.add_argument(
         "--fasta", help="Output will be generated in FASTA format [false]", action="store_true", default=False)
     parser.add_argument(
-        "--step", type=int, default=10000, help="How many IDs to submit per request to the API [10000]")
+        "--step", type=int, default=1000, help="How many IDs to submit per request to the API [10000]")
     parser.add_argument(
         "--max-tries", default=3, type=int,
         help="How many times to try obtaining information from UniProt before giving up [3]")
