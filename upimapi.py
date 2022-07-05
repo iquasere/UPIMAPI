@@ -186,7 +186,7 @@ def get_url(url, **kwargs):
     return response
 
 
-def uniprot_request(ids, api_info, columns_dict, columns=None, output_format='tsv'):
+def uniprot_request(ids, api_info, columns_dict=None, columns=None, output_format='tsv'):
     """
     Input:
         ids: list of UniProt IDs to query
