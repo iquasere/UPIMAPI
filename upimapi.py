@@ -1143,7 +1143,7 @@ def upimapi():
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
         if not args.skip_id_checking:
-            ids = get_valid_entries(ids)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
+            ids = get_valid_entries(ids, api_info)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
 
         # ID mapping through API
         uniprot_information_workflow(
@@ -1159,7 +1159,7 @@ def upimapi():
                 f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
         if not args.skip_id_checking:
-            ids = get_valid_entries(ids)
+            ids = get_valid_entries(ids, api_info)
         uniprot_fasta_workflow(ids, api_info, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
 
 
