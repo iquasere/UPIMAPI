@@ -198,10 +198,10 @@ def uniprot_request(ids, api_info, columns_dict=None, columns=None, output_forma
     Output:
         Returns the content of the response from UniProt
     """
+    fields = f'&fields={string4mapping(columns_dict, columns=columns)}' if columns is not None else ''
     WEBSITE_API = api_info['servers'][0]['url']
     resp = get_url(
-        f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}&fields="
-        f"{string4mapping(columns_dict, columns=columns)}&format={output_format}")
+        f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}{fields}&format={output_format}")
     return resp.text
 
 
@@ -253,7 +253,7 @@ def get_uniprot_information(ids, api_info, columns_dict, step=1000, sleep_time=3
         j = min(i + step, len(ids))
         while not done and tries < max_tries:
             try:
-                data = uniprot_request(ids[i:j], api_info, columns_dict, columns=columns)
+                data = uniprot_request(ids[i:j], api_info, columns_dict=columns_dict, columns=columns)
                 if len(data) > 0:
                     uniprotinfo = pd.read_csv(StringIO(data), sep='\t')
                     result = pd.concat([result, uniprotinfo[uniprotinfo.columns.tolist()]])
