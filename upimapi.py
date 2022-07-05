@@ -259,8 +259,7 @@ def submit_id_mapping(fromDB, toDB, ids):
 def get_id_mapping_results(job_id):
     POLLING_INTERVAL = 3
     while True:
-        r = requests.get(f"{api_info['servers'][0]['url']}/idmapping/status/{job_id}")
-        r.raise_for_status()
+        r = get_url(f"{api_info['servers'][0]['url']}/idmapping/status/{job_id}")
         job = r.json()
         if "jobStatus" in job:
             if job["jobStatus"] == "RUNNING":
@@ -269,15 +268,22 @@ def get_id_mapping_results(job_id):
             else:
                 raise Exception(job["jobStatus"])
         else:
-            return job
+            return r
 
 
 def get_valid_entries(ids):
     job_id = submit_id_mapping(fromDB="UniProtKB_AC-ID", toDB="UniProtKB", ids=ids)
-    results = get_id_mapping_results(job_id)
-    return [r["from"] for r in results["results"] if '_' not in r["from"]]
+    r = get_id_mapping_results(job_id)
+    valid_entries = [res["from"] for res in r.json()["results"] if '_' not in res["from"]]
+    with tqdm(total=int(r.headers.get("x-total-records"))) as pbar:
+        while r.links.get("next", {}).get("url"):
+            r = get_url(r.links["next"]["url"])
+            valid_entries += [res["from"] for res in r.json()["results"] if '_' not in res["from"]]
+            pbar.update(len(r.json()["results"]))
+    return valid_entries
 
 
+# TODO - deprecated, remove eventually
 def get_all_valid_entries(ids):
     valid_ids = []
     for i in tqdm(range(0, len(ids), 25), desc='Finding valid UniProt IDs for ID mapping'):
@@ -1186,7 +1192,7 @@ def upimapi():
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
         if not args.skip_id_checking:
-            ids = get_all_valid_entries(ids)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
+            ids = get_valid_entries(ids)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
 
         # ID mapping through API
         uniprot_information_workflow(
@@ -1202,7 +1208,7 @@ def upimapi():
                 f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
         if not args.skip_id_checking:
-            ids = get_all_valid_entries(ids)
+            ids = get_valid_entries(ids)
         uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
 
 
