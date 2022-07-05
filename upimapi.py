@@ -1160,7 +1160,7 @@ def upimapi():
     else:
         if not args.skip_id_checking:
             ids = get_valid_entries(ids, api_info)
-        uniprot_fasta_workflow(ids, api_info, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
+        uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', api_info, step=args.step, sleep_time=args.sleep)
 
 
 if __name__ == '__main__':
