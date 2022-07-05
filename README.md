@@ -20,7 +20,11 @@ To install UPIMAPI through Bioconda, run
 ```
 conda install -c conda-forge -c bioconda upimapi
 ```
-To check if it was installed correctly, run
+Additionally, UPIMAPI requires some apt-get packages so it can do some webscraping. They can be installed with
+```
+apt-get install packagekit-gtk3-module libasound2 libdbus-glib-1-2 libx11-xcb1
+```
+To check if UPIMAPI was installed correctly, run
 ```
 upimapi.py --version
 ```
@@ -66,18 +70,16 @@ To input a custom database into UPIMAPI, specify it as ```--database path/to/dat
 
 ## Information retrieval from UniProt
 
-### Columns and databases of information from UniProt
+### Columns of information from UniProt
 
 UniProt provides information for many different fields of information and cross-references. For the user's convenience, a default selection is provided:
-* **default columns:** ```Entry```, ```Entry name```, ```Gene names```, ```Protein names```, ```EC number```, ```Function[CC]```, ```Pathway```, ```Keywords```, ```Protein existence```, ```Gene ontology (GO)```, ```Protein families```, ```Taxonomic lineage (SUPERKINGDOM)```, ```Taxonomic lineage (PHYLUM)```, ```Taxonomic lineage (CLASS)```, ```Taxonomic lineage (ORDER)```, ```Taxonomic lineage (FAMILY)```, ```Taxonomic lineage (GENUS)```, ```Taxonomic lineage (SPECIES)```
-
-* **default databases:** ```BioCyc Collection of Pathway/Genome Databases```, ```BRENDA Comprehensive Enzyme Information System```, ```Conserved Domains Database```, ```evolutionary genealogy of genes: Non-supervised Orthologous Groups```, ```Ensembl eukaryotic genome annotation project```, ```Integrated resource of protein families, domains and functional sites```, ```KEGG: Kyoto Encyclopedia of Genes and Genomes```, ```KEGG Orthology (KO)```, ```Pfam protein domain database```, ```Reactome - a knowledgebase of biological pathways and processes```, ```NCBI Reference Sequences```, ```UniPathway: a resource for the exploration and annotation of metabolic pathways```
+* **default columns:** ```Entry```, ```Entry name```, ```Gene names```, ```Protein names```, ```EC number```, ```Function[CC]```, ```Pathway```, ```Keywords```, ```Protein existence```, ```Gene ontology (GO)```, ```Protein families```, ```Taxonomic lineage```, ```Organism```, ```Organism ID```, ```BioCyc```, ```BRENDA```, ```CDD```, ```eggNOG```, ```Ensembl```, ```InterPro```, ```KEGG```, ```Pfam```, ```Reactome```, ```RefSeq``` and ```UniPathway```
 
 If another selection of columns/databases is desired, it can be specified, for example, as 
 ```
---columns Coiled coil&Compositional bias --databases UCSC genome browser&Xenopus laevis and tropicalis biology and genomics resource
+--columns "Coiled coil&Compositional bias"
 ```
-where ```--columns``` and ```--databases``` take as input the names of the [columns](https://www.uniprot.org/help/uniprotkb_column_names) and [databases](https://www.uniprot.org/docs/dbxref) required, respectively. The links provided take to the pages of UniProt where the possible columns and databases values are listed.
+where ```--columns``` take as input the names of the [columns](https://www.uniprot.org/help/return_fields) required, respectively. The links provided take to the pages of UniProt where the possible columns and databases values are listed.
 
 ## ID mapping without annotation
 
@@ -138,9 +140,6 @@ optional arguments:
   -cols COLUMNS, --columns COLUMNS
                         List of UniProt columns to obtain information from
                         (separated by &)
-  -dbs ANNOTATION_DATABASES, --annotation-databases ANNOTATION_DATABASES
-                        List of databases to cross-check with UniProt
-                        information (separated by &)
   --blast               If input file is in BLAST TSV format (will consider
                         one ID per line if not set)
   --full-id FULL_ID     If IDs in database are in 'full' format: tr|XXX|XXX
