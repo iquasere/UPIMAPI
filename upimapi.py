@@ -29,7 +29,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.1'
+__version__ = '1.8.2'
 
 
 def get_arguments():
@@ -39,7 +39,7 @@ def get_arguments():
         "-i", "--input", help="""Input filename - can be:\n
         \t1. a file containing a list of IDs (comma-separated values, no spaces)\n
         \t2. a BLAST TSV result file (requires to be specified with the --blast parameter\n
-        \t3. a protein FASTA file to be annotated (requires the --use-diamond and -db parameters)\n
+        \t3. a protein FASTA file to be annotated (requires the -db parameter)\n
         \t4. nothing! If so, will read input from command line, and parse as CSV (id1,id2,...)""")
     parser.add_argument("-o", "--output", help="Folder to store outputs", default="UPIMAPI_output")
     parser.add_argument(
@@ -113,6 +113,7 @@ def get_arguments():
     args = parser.parse_args()
     args.output = args.output.rstrip('/')
     args.resources_directory = args.resources_directory.rstrip('/')
+    args.columns = args.columns.split('&') if args.columns else None
     if args.taxids is not None:
         args.taxids = args.taxids.split(',')
     return args
@@ -152,11 +153,12 @@ def parse_blast(blast):
 
 
 def string4mapping(columns_dict, columns=None):
-    if columns is None:   # if no columns or databases are inputted, UPIMAPI uses defaults
+    if columns is None or columns == []:   # if no columns or databases are inputted, UPIMAPI uses defaults
         with open(f'{sys.path[0]}/default_columns.txt') as f:
             columns = f.read().splitlines()
-    else:
-        columns = [] if columns is None else columns
+    for col in ['Entry', 'Entry name']:
+        if col not in columns:
+            columns.append(col)
     cols = [columns_dict[column] for column in columns if not column.startswith('Taxonomic')]
     return ','.join(cols)
 
