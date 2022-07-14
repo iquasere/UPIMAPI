@@ -154,7 +154,7 @@ def parse_blast(blast):
 
 def string4mapping(columns_dict, columns=None):
     if columns is None or columns == []:   # if no columns or databases are inputted, UPIMAPI uses defaults
-        with open(f'{sys.path[0]}/default_columns.txt') as f:
+        with open(f'{sys.path[0]}/resources/default_columns.txt') as f:
             columns = f.read().splitlines()
     for col in ['Entry', 'Entry name']:
         if col not in columns:
@@ -200,7 +200,7 @@ def uniprot_request(ids, api_info, columns_dict=None, columns=None, output_forma
     Output:
         Returns the content of the response from UniProt
     """
-    fields = f'&fields={string4mapping(columns_dict, columns=columns)}' if columns is not None else ''
+    fields = f'&fields={string4mapping(columns_dict, columns=columns)}' if columns is not None else f'&fields={string4mapping(columns_dict)}'
     WEBSITE_API = api_info['servers'][0]['url']
     resp = get_url(
         f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}{fields}&format={output_format}")
