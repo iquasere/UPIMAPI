@@ -64,5 +64,5 @@ jobs:
       - name: Obtain FASTA sequences
         run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation --fasta"
 
-      - name: Full workflow, TaxIDs DB at Family level
-        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/proteomes.fasta -rd resources_directory -db taxids --taxids 196137,143067,2159,213465,213422,213421,68298"
+      - name: Full workflow, TaxIDs DB at Species level
+        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/proteomes.fasta -rd resources_directory -db taxids --taxids 2203,2223,2209,2162,119484,35554,29543,863"

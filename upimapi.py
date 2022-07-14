@@ -147,20 +147,23 @@ def get_fasta_ids(filename):
 
 def parse_blast(blast):
     result = pd.read_csv(blast, sep='\t', header=None)
-    result.columns = ['qseqid', 'sseqid', 'pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart',
-                      'send', 'evalue', 'bitscore']
+    result.columns = [
+        'qseqid', 'sseqid', 'pident', 'length', 'mismatch', 'gapopen', 'qstart', 'qend', 'sstart', 'send', 'evalue',
+        'bitscore']
     return result
 
 
 def string4mapping(columns_dict, columns=None):
-    if columns is None or columns == []:   # if no columns or databases are inputted, UPIMAPI uses defaults
-        with open(f'{sys.path[0]}/default_columns.txt') as f:
-            columns = f.read().splitlines()
-    for col in ['Entry', 'Entry name']:
+    if columns is None or columns == []:   # if no columns are inputted, UPIMAPI uses defaults
+        columns = [
+            'Entry', 'Entry name', 'Gene names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
+            'Protein existence', 'Gene ontology (GO)', 'Protein families', 'Taxonomic lineage', 'Organism',
+            'Organism ID', 'BioCyc', 'BRENDA', 'CDD', 'eggNOG', 'Ensembl', 'InterPro', 'KEGG', 'Pfam', 'Reactome',
+            'RefSeq', 'UniPathway']
+    for col in ['Entry name', 'Entry']:
         if col not in columns:
-            columns.append(col)
-    cols = [columns_dict[column] for column in columns if not column.startswith('Taxonomic')]
-    return ','.join(cols)
+            columns.insert(0, col)
+    return ','.join([columns_dict[column] for column in columns])
 
 
 def parallelize(data, func, num_of_processes=8):
@@ -202,8 +205,7 @@ def uniprot_request(ids, api_info, columns_dict=None, columns=None, output_forma
     """
     fields = f'&fields={string4mapping(columns_dict, columns=columns)}'
     WEBSITE_API = api_info['servers'][0]['url']
-    resp = get_url(
-        f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}{fields}&format={output_format}")
+    resp = get_url(f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}{fields}&format={output_format}")
     return resp.text
 
 
@@ -268,7 +270,7 @@ def get_uniprot_information(ids, api_info, columns_dict, step=1000, sleep_time=3
     return result
 
 
-def get_uniprot_fasta(ids, api_info, step=1000, sleep_time=30):
+def get_uniprot_fasta(ids, api_info, columns_dict, step=1000, sleep_time=30):
     """
     Input:
         ids: list of UniProt IDs to query
@@ -278,18 +280,17 @@ def get_uniprot_fasta(ids, api_info, step=1000, sleep_time=30):
         str object containing the fasta sequences and headers
         of the proteis belonging to the IDs queried will be returned
     """
-    print(f'Building FASTA from {len(ids)} IDs.')
-    result = str()
-    for i in tqdm(range(0, len(ids), step), desc="UniProt ID mapping"):
+    result = ''
+    for i in tqdm(range(0, len(ids), step), desc="Building FASTA from {len(ids)} IDs."):
         j = min(i + step, len(ids))
-        data = uniprot_request(ids[i:j], api_info, output_format='fasta')
+        data = uniprot_request(ids[i:j], api_info, columns_dict, output_format='fasta')
         if len(data) > 0:
             result += data
         sleep(sleep_time)
     return result
 
 
-def uniprot_fasta_workflow(all_ids, output, api_info, max_iter=5, step=1000, sleep_time=10):
+def uniprot_fasta_workflow(all_ids, output, api_info, columns_dict, max_iter=5, step=1000, sleep_time=10):
     if os.path.isfile(output):
         print(f'{output} was found. Will perform mapping for the remaining IDs.')
         ids_done = get_fasta_ids(output)
@@ -306,7 +307,7 @@ def uniprot_fasta_workflow(all_ids, output, api_info, max_iter=5, step=1000, sle
         ids_missing = list(set([ide for ide in tqdm(all_ids, desc='Checking which IDs are missing information.')
                                 if ide not in ids_done]))
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
-        uniprotinfo = get_uniprot_fasta(ids_missing, api_info, step=step, sleep_time=sleep_time)
+        uniprotinfo = get_uniprot_fasta(ids_missing, api_info, columns_dict, step=step, sleep_time=sleep_time)
         with open(output, 'a') as file:
             file.write(uniprotinfo)
         ids_done = [ide.split('|')[1] for ide in get_fasta_ids(output)]
@@ -385,8 +386,11 @@ def get_ids(args_input, input_type='blast', full_id='auto'):
     if input_type == 'blast':
         ids = parse_blast(args_input)['sseqid']
     elif input_type == 'txt':
-        ids = open(args_input).read().split(',')
-    else:
+        ids = []
+        preids = open(args_input).read().split('\n')
+        for preid in preids:
+            ids.append(preid.split(','))
+    else:       # if PIPE
         ids = args_input.split(',')
     if full_id == 'auto':
         full_id = determine_full_id(ids)
@@ -1162,7 +1166,8 @@ def upimapi():
     else:
         if not args.skip_id_checking:
             ids = get_valid_entries(ids, api_info)
-        uniprot_fasta_workflow(ids, f'{args.output}/uniprotinfo.fasta', api_info, step=args.step, sleep_time=args.sleep)
+        uniprot_fasta_workflow(
+            ids, f'{args.output}/uniprotinfo.fasta', api_info, columns_dict, step=args.step, sleep_time=args.sleep)
 
 
 if __name__ == '__main__':

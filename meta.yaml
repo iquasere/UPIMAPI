@@ -1,5 +1,5 @@
 {% set name = "upimapi" %}
-{% set version = "1.8.0" %}
+{% set version = "1.8.3" %}
 {% set sha256 = "e5eda4953af1bbb20c7a4dc79bb8975603bd0cac666218cdc753f8cf3f9ca716" %}
 
 package:
@@ -13,9 +13,7 @@ source:
 build:
   noarch: generic
   number: 0
-  script: >
-    mkdir -p $PREFIX/share && cp upimapi.py $PREFIX/share && cp resources/* $PREFIX/share &&
-    chmod +x $PREFIX/share/upimap.py && ln -s $PREFIX/share/upimapi.py ${PREFIX}/bin
+  script: mkdir -p $PREFIX/bin && cp upimapi.py $PREFIX/bin && chmod +x $PREFIX/bin/upimapi.py
 
 requirements:
   run:
