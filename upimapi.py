@@ -29,7 +29,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.2'
+__version__ = '1.8.3'
 
 
 def get_arguments():
@@ -200,7 +200,7 @@ def uniprot_request(ids, api_info, columns_dict=None, columns=None, output_forma
     Output:
         Returns the content of the response from UniProt
     """
-    fields = f'&fields={string4mapping(columns_dict, columns=columns)}' if columns is not None else ''
+    fields = f'&fields={string4mapping(columns_dict, columns=columns)}'
     WEBSITE_API = api_info['servers'][0]['url']
     resp = get_url(
         f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}{fields}&format={output_format}")
