@@ -283,7 +283,7 @@ def get_uniprot_fasta(ids, api_info, columns_dict, step=1000, sleep_time=30):
     result = ''
     for i in tqdm(range(0, len(ids), step), desc="Building FASTA from {len(ids)} IDs."):
         j = min(i + step, len(ids))
-        data = uniprot_request(ids[i:j], api_info, columns_dict, output_format='fasta')
+        data = uniprot_request(ids[i:j], api_info, columns_dict=columns_dict, output_format='fasta')
         if len(data) > 0:
             result += data
         sleep(sleep_time)

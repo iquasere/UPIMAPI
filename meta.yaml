@@ -13,7 +13,7 @@ source:
 build:
   noarch: generic
   number: 0
-  script: mkdir -p $PREFIX/bin && cp upimapi.py $PREFIX/bin && chmod +x $PREFIX/bin/upimapi.py
+  script: "mkdir -p $PREFIX/bin && cp upimapi.py $PREFIX/bin"
 
 requirements:
   run:

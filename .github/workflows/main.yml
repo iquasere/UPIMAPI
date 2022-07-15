@@ -52,8 +52,12 @@ jobs:
       - name: Check base entrypoint
         run: docker run upimapi /bin/bash -c "ls"
 
-      - name: IDs inputted through TXT file
+      - name: IDs inputted through TXT file (comma-separated)
         run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation -cols 'Entry&KEGG&Interacts with'"
+
+      - name: IDs inputted through TXT file (newline-separated)
+        run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/full_ids.txt -rd resources_directory --no-annotation -cols 'Entry&KEGG&Interacts with'"
+
 
       #- name: ID mapping with SwissProt mapping
       #  run: docker run upimapi /bin/bash -c "upimapi.py -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation --local-id-mapping"
