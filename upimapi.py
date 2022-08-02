@@ -222,21 +222,32 @@ def get_id_mapping_results(job_id, api_info):
         if "jobStatus" in job:
             if job["jobStatus"] == "RUNNING":
                 sleep(3)
-            else:
-                raise Exception(job["jobStatus"])
         else:
             return r
+
+
+def get_valid_entries_batch(ids, api_info):
+    """
+    Allows to retrieve millions of IDs at once, there seems to be some limit causing UniProt's API to fail with
+    Request Entity Too Large for url.
+    :param ids:
+    :param api_info:
+    :return:
+    """
+    valid_entries = []
+    for i in tqdm(range(0, len(ids), 100000), desc='Getting valid UniProt IDs'):
+        j = min(i + 100, len(ids))
+        valid_entries += get_valid_entries(ids[i:j], api_info)
+    return valid_entries
 
 
 def get_valid_entries(ids, api_info):
     job_id = submit_id_mapping("UniProtKB_AC-ID", "UniProtKB", ids, api_info)
     r = get_id_mapping_results(job_id, api_info)
     valid_entries = [res["from"] for res in r.json()["results"] if '_' not in res["from"]]
-    with tqdm(total=int(r.headers.get("x-total-records"))) as pbar:
-        while r.links.get("next", {}).get("url"):
-            r = get_url(r.links["next"]["url"])
-            valid_entries += [res["from"] for res in r.json()["results"] if '_' not in res["from"]]
-            pbar.update(len(r.json()["results"]))
+    while r.links.get("next", {}).get("url"):
+        r = get_url(r.links["next"]["url"])
+        valid_entries += [res["from"] for res in r.json()["results"] if '_' not in res["from"]]
     return valid_entries
 
 
@@ -303,7 +314,6 @@ def uniprot_fasta_workflow(all_ids, output, api_info, columns_dict, max_iter=5, 
     tries = 0
     ids_done = ([ide.split('|')[1] for ide in get_fasta_ids(output)] if os.path.isfile(output) else [])
     while len(ids_done) < len(all_ids) and tries < max_iter:
-        print('Checking which IDs are missing information.')
         ids_missing = list(set([ide for ide in tqdm(all_ids, desc='Checking which IDs are missing information.')
                                 if ide not in ids_done]))
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
@@ -384,12 +394,12 @@ def determine_full_id(ids):
 
 def get_ids(args_input, input_type='blast', full_id='auto'):
     if input_type == 'blast':
-        ids = parse_blast(args_input)['sseqid']
+        ids = parse_blast(args_input)['sseqid'].tolist()
     elif input_type == 'txt':
         ids = []
         preids = open(args_input).read().split('\n')
         for preid in preids:
-            ids.append(preid.split(','))
+            ids += preid.split(',')
     else:       # if PIPE
         ids = args_input.split(',')
     if full_id == 'auto':
@@ -612,8 +622,8 @@ def lineage_to_columns(lineage, tax_tsv):
                 if type(rank) == str:
                     l2c_result[f'Taxonomic lineage ({rank.upper()})'] = taxon
                     l2c_taxids[f'Taxonomic identifier ({rank.upper()})'] = taxid
-    l2c_result['Taxonomic lineage (ALL)'] = ', '.join(set(l2c_result.values()))         # TODO - is missing SPECIES?
-    l2c_taxids['Taxonomic identifier (ALL)'] = ', '.join(set(l2c_taxids.values()))      # TODO - is missing SPECIES?
+    l2c_result['Taxonomic lineage (ALL)'] = ', '.join(set(l2c_result.values()))
+    l2c_taxids['Taxonomic identifier (ALL)'] = ', '.join(set(l2c_taxids.values()))
     l2c_result = {**l2c_result, **l2c_taxids, 'index': lineage}
     return l2c_result
 
@@ -1149,7 +1159,7 @@ def upimapi():
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
         if not args.skip_id_checking:
-            ids = get_valid_entries(ids, api_info)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
+            ids = get_valid_entries_batch(ids, api_info)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
 
         # ID mapping through API
         uniprot_information_workflow(
