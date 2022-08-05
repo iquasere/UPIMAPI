@@ -29,7 +29,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.3'
+__version__ = '1.8.4'
 
 
 def get_arguments():
@@ -226,19 +226,21 @@ def get_id_mapping_results(job_id, api_info):
             return r
 
 
-def get_valid_entries_batch(ids, api_info):
+def get_valid_entries_batch(ids, api_info, step=1000):
     """
     Allows to retrieve millions of IDs at once, there seems to be some limit causing UniProt's API to fail with
-    Request Entity Too Large for url.
+    "Request Entity Too Large for url".
     :param ids:
     :param api_info:
     :return:
     """
     valid_entries = []
-    for i in tqdm(range(0, len(ids), 100000), desc='Getting valid UniProt IDs'):
-        j = min(i + 100, len(ids))
+    for i in tqdm(range(0, len(ids), step), desc='Getting valid UniProt IDs'):
+        j = min(i + step, len(ids))
         valid_entries += get_valid_entries(ids[i:j], api_info)
-    return valid_entries
+    timed_message(f'{len(valid_entries)} UniProt IDs identified as valid.')
+    not_valid = set(ids) - set(valid_entries)
+    return valid_entries, not_valid
 
 
 def get_valid_entries(ids, api_info):
@@ -292,7 +294,7 @@ def get_uniprot_fasta(ids, api_info, columns_dict, step=1000, sleep_time=30):
         of the proteis belonging to the IDs queried will be returned
     """
     result = ''
-    for i in tqdm(range(0, len(ids), step), desc="Building FASTA from {len(ids)} IDs."):
+    for i in tqdm(range(0, len(ids), step), desc=f"Building FASTA from {len(ids)} IDs."):
         j = min(i + step, len(ids))
         data = uniprot_request(ids[i:j], api_info, columns_dict=columns_dict, output_format='fasta')
         if len(data) > 0:
@@ -397,7 +399,8 @@ def get_ids(args_input, input_type='blast', full_id='auto'):
         ids = parse_blast(args_input)['sseqid'].tolist()
     elif input_type == 'txt':
         ids = []
-        preids = open(args_input).read().split('\n')
+        with open(args_input) as f:
+            preids = f.read().split('\n')
         for preid in preids:
             ids += preid.split(',')
     else:       # if PIPE
@@ -411,6 +414,7 @@ def get_ids(args_input, input_type='blast', full_id='auto'):
         return return_ids, full_id, sp_ids
     return_ids = [ide for ide in ids if ide not in ['*', '']]
     return return_ids, full_id, return_ids
+    # second return_ids is just mock to return the same type of output as for sp_ids
 
 
 def run_command(bash_command, print_message=True):
@@ -1159,7 +1163,12 @@ def upimapi():
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
         if not args.skip_id_checking:
-            ids = get_valid_entries_batch(ids, api_info)    # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
+            ids, not_valid = get_valid_entries_batch(ids, api_info)
+            # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
+            with open(f'{args.output}/valid_ids.txt', 'w') as f:
+                f.write('\n'.join(ids))
+            with open(f'{args.output}/not_valid_ids.txt', 'w') as f:
+                f.write('\n'.join(not_valid))
 
         # ID mapping through API
         uniprot_information_workflow(
