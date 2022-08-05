@@ -226,6 +226,24 @@ def get_id_mapping_results(job_id, api_info):
             return r
 
 
+def split(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n))
+
+
+def get_valid_entries_multiprocess(ids, api_info, step=1000, threads=15):
+    valid_entries = []
+    ids_groups = split(list(set(ids)), threads)
+    with Manager() as m:
+        with m.Pool() as p:
+            result = p.starmap(get_valid_entries_batch, [(ids_group, api_info, step) for ids_group in ids_groups])
+    for res in result:
+        valid_entries += res
+    not_valid = set(ids) - set(valid_entries)
+    timed_message(f'{len(valid_entries)} UniProt IDs identified as valid.')
+    return valid_entries, not_valid
+
+
 def get_valid_entries_batch(ids, api_info, step=1000):
     """
     Allows to retrieve millions of IDs at once, there seems to be some limit causing UniProt's API to fail with
@@ -236,11 +254,15 @@ def get_valid_entries_batch(ids, api_info, step=1000):
     """
     valid_entries = []
     for i in tqdm(range(0, len(ids), step), desc='Getting valid UniProt IDs'):
-        j = min(i + step, len(ids))
-        valid_entries += get_valid_entries(ids[i:j], api_info)
-    timed_message(f'{len(valid_entries)} UniProt IDs identified as valid.')
-    not_valid = set(ids) - set(valid_entries)
-    return valid_entries, not_valid
+        done = False
+        while not done:
+            j = min(i + step, len(ids))
+            try:
+                valid_entries += get_valid_entries(ids[i:j], api_info)
+                done = True
+            except:
+                sleep(3)
+    return valid_entries
 
 
 def get_valid_entries(ids, api_info):
@@ -1032,10 +1054,7 @@ def check_no_annotation(args_input, no_annotation):
                 'File seems to be FASTA, but you choose to not perform annotation! '
                 'Do you want to perform annotation? [Y/N] '))
     if not is_fasta:
-        if not no_annotation:
-            change = str2bool(input(
-                'File seems to not be FASTA, but you choose to perform annotation! '
-                'Do you want to skip annotation? [Y/N] '))
+        no_annotation = True
     return not no_annotation if change else no_annotation
 
 
@@ -1076,7 +1095,8 @@ def blast_consensus(alignment_file):
 
 
 def load_api_info():
-    return yaml.safe_load(requests.get('https://rest.uniprot.org/docs/uniprot-openapi3.yaml').text)
+    #return yaml.safe_load(requests.get('https://rest.uniprot.org/docs/uniprot-openapi3.yaml').text)
+    return {'servers': [{'url': 'https://rest.uniprot.org'}]} #api_info['servers'][0]['url']
 
 
 def get_uniprot_columns():
@@ -1163,7 +1183,7 @@ def upimapi():
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
         if not args.skip_id_checking:
-            ids, not_valid = get_valid_entries_batch(ids, api_info)
+            ids, not_valid = get_valid_entries_multiprocess(ids[:10000], api_info, threads=args.threads)
             # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
             with open(f'{args.output}/valid_ids.txt', 'w') as f:
                 f.write('\n'.join(ids))
@@ -1184,7 +1204,7 @@ def upimapi():
                 f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
         if not args.skip_id_checking:
-            ids = get_valid_entries(ids, api_info)
+            ids = get_valid_entries_multiprocess(ids, api_info)
         uniprot_fasta_workflow(
             ids, f'{args.output}/uniprotinfo.fasta', api_info, columns_dict, step=args.step, sleep_time=args.sleep)
 
