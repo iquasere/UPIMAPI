@@ -1183,7 +1183,7 @@ def upimapi():
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
         if not args.skip_id_checking:
-            ids, not_valid = get_valid_entries_multiprocess(ids[:10000], api_info, threads=args.threads)
+            ids, not_valid = get_valid_entries_multiprocess(ids, api_info, threads=args.threads)
             # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
             with open(f'{args.output}/valid_ids.txt', 'w') as f:
                 f.write('\n'.join(ids))
