@@ -228,14 +228,12 @@ def get_id_mapping_results(job_id, api_info):
 
 def split(a, n):
     k, m = divmod(len(a), n)
-    print(k,m)
     return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
 def get_valid_entries_multiprocess(ids, api_info, step=1000, threads=15):
     valid_entries = []
     ids_groups = split(list(set(ids)), threads)
-    print(ids_groups)
     with Manager() as m:
         with m.Pool() as p:
             result = p.starmap(get_valid_entries_batch, [(ids_group, api_info, step) for ids_group in ids_groups])
