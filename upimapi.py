@@ -29,7 +29,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.4'
+__version__ = '1.8.5'
 
 
 def get_arguments():
@@ -333,7 +333,10 @@ def uniprot_fasta_workflow(all_ids, output, api_info, columns_dict, max_iter=5, 
     else:
         print(f'{output} not found. Will perform mapping for all IDs.')
         ids_done = []
-
+    print(ids_done)
+    print(all_ids)
+    print(set(ids_done))
+    print(set(all_ids))
     ids_missing = list(set(all_ids) - set(ids_done))
 
     tries = 0
@@ -1200,7 +1203,7 @@ def upimapi():
                 f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
         if not args.skip_id_checking:
-            ids = get_valid_entries_multiprocess(ids, api_info)
+            ids, not_valid = get_valid_entries_multiprocess(ids, api_info)
         uniprot_fasta_workflow(
             ids, f'{args.output}/uniprotinfo.fasta', api_info, columns_dict, step=args.step, sleep_time=args.sleep)
 
