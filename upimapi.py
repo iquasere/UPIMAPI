@@ -91,8 +91,8 @@ def get_arguments():
              "will be used as reference\n"
              "\t4. a custom database - Input will be considered as the database, and will be used as reference")
     diamond_args.add_argument(
-        "-t", "--threads", type=int, default=cpu_count() - 2,
-        help="Number of threads to use in annotation steps [total available - 2]")
+        "-t", "--threads", type=int, default=cpu_count(),
+        help="Number of threads to use in annotation steps [all available]")
     diamond_args.add_argument(
         "--evalue", type=float, default=1e-3, help="Maximum e-value to report annotations for [1e-3]")
     diamond_args.add_argument(
@@ -248,6 +248,7 @@ def get_valid_entries_batch(ids, api_info, step=1000):
     """
     Allows to retrieve millions of IDs at once, there seems to be some limit causing UniProt's API to fail with
     "Request Entity Too Large for url".
+    :param step:
     :param ids:
     :param api_info:
     :return:
