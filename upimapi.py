@@ -333,10 +333,6 @@ def uniprot_fasta_workflow(all_ids, output, api_info, columns_dict, max_iter=5, 
     else:
         print(f'{output} not found. Will perform mapping for all IDs.')
         ids_done = []
-    print(ids_done)
-    print(all_ids)
-    print(set(ids_done))
-    print(set(all_ids))
     ids_missing = list(set(all_ids) - set(ids_done))
 
     tries = 0
@@ -680,7 +676,7 @@ def get_upper_taxids(taxid, tax_df):
 def parse_taxonomy(data, tax_tsv_df, threads=15):
     tax_tsv_df.set_index('name', inplace=True)
     tax_tsv_df['taxid'] = tax_tsv_df['taxid'].astype(str)
-    all_classifications = split_list(data['organism_classification'].drop_duplicates().tolist(), threads)
+    all_classifications = split(data['organism_classification'].drop_duplicates().tolist(), threads)
     with Manager() as m:
         with m.Pool() as p:
             result = p.starmap(lineages_to_columns, [(classifications, tax_tsv_df)
