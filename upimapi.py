@@ -29,7 +29,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.5'
+__version__ = '1.8.6'
 
 
 def get_arguments():
@@ -157,9 +157,9 @@ def string4mapping(columns_dict, columns=None):
     if columns is None or columns == []:   # if no columns are inputted, UPIMAPI uses defaults
         columns = [
             'Entry', 'Entry name', 'Gene names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
-            'Protein existence', 'Gene ontology (GO)', 'Protein families', 'Taxonomic lineage', 'Organism',
-            'Organism ID', 'BioCyc', 'BRENDA', 'CDD', 'eggNOG', 'Ensembl', 'InterPro', 'KEGG', 'Pfam', 'Reactome',
-            'RefSeq', 'UniPathway']
+            'Protein existence', 'Gene ontology (GO)', 'Protein families', 'Taxonomic lineage',
+            'Taxonomic lineage (IDs)', 'Organism', 'Organism ID', 'BioCyc', 'BRENDA', 'CDD', 'eggNOG', 'Ensembl',
+            'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway']
     for col in ['Entry name', 'Entry']:
         if col not in columns:
             columns.insert(0, col)
@@ -377,12 +377,44 @@ def check_ids_already_done(output, ids):
     return ids_done, ids_missing, result
 
 
+def extract_lineage_columns(columns):
+    tax_cols, taxids_cols = [], []
+    if columns is not None:
+        tax_cols = [col for col in columns if ('Taxonomic lineage (' in col and col != 'Taxonomic lineage (IDs)')]
+        taxids_cols = [col for col in columns if ('Taxonomic lineage IDs (' in col)]
+        columns = [col for col in columns if col not in tax_cols + taxids_cols]
+        if len(tax_cols) > 0:
+            columns.append('Taxonomic lineage')
+        if len(taxids_cols) > 0:
+            columns.append('Taxonomic lineage (IDs)')
+    return columns, tax_cols, taxids_cols
+
+
+def taxonomic_lineage_to_df(tax_lineage):
+    infos = tax_lineage.split(', ')
+    result = {}
+    for info in infos:
+        value, level = info.split(')')[0].split(' (')
+        if level != 'no rank':
+            result[level] = value
+    return pd.DataFrame(result, index=[0])
+
+
+def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
+    result = pd.DataFrame()
+    for tax_lineage in tqdm(tax_lineage_col, desc='Building taxonomic lineage dataframe'):
+        result = pd.concat([result, taxonomic_lineage_to_df(tax_lineage)])
+    result.columns = [f'{prefix} ({col.upper()})' for col in result.columns]
+    return result.reset_index()
+
+
 def uniprot_information_workflow(
         ids, output, api_info, columns_dict, max_iter=5, columns=None, step=1000, sleep_time=10):
     ids_done, ids_missing, result = check_ids_already_done(output, ids)
     tries = 0
     last_ids_missing = None
     ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
+    columns, tax_cols, taxids_cols = extract_lineage_columns(columns)
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
@@ -399,6 +431,15 @@ def uniprot_information_workflow(
             else:
                 print('Failed to retrieve information for some IDs. Retrying request.')
                 tries += 1
+    if len(tax_cols) > 0:
+        tax_df = make_taxonomic_lineage_df(result['Taxonomic lineage'], prefix='Taxonomic lineage')
+        tax_df = tax_df[[col for col in tax_df.columns if col in tax_cols]]
+        result = pd.concat([result, tax_df], axis=1)
+    if len(taxids_cols) > 0:
+        taxids_df = make_taxonomic_lineage_df(result['Taxonomic lineage (Ids)'], prefix='Taxonomic lineage IDs')
+        taxids_df = taxids_df[[col for col in taxids_df.columns if col in taxids_cols]]
+        result = pd.concat([result, taxids_df], axis=1)
+    del result['index']
     result.to_csv(output, sep='\t', index=False)
     if len(ids_missing) == 0:
         print(f'Results for all IDs are available at {output}')
@@ -407,6 +448,7 @@ def uniprot_information_workflow(
         print(f"Maximum iterations were made. Results related to {str(len(ids_missing))} IDs were not obtained. "
               f"IDs with missing information are available at {ids_unmapped_output} and information obtained is "
               f"available at {output}")
+    return result
 
 
 def determine_full_id(ids):
@@ -655,6 +697,12 @@ def lineage_to_columns(lineage, tax_tsv):
 
 
 def lineages_to_columns(lineages, tax_tsv):
+    """
+    Does the same as lineage_to_columns, but to all lineages, instead of a single one
+    :param lineages:
+    :param tax_tsv:
+    :return:
+    """
     return [lineage_to_columns(lineage, tax_tsv) for lineage in lineages]
 
 
@@ -858,9 +906,9 @@ def parse_feature(feature, position, qualifiers=True, ide=True):
     :param ide: bool - add id information?
     :return: str - the term to add
     """
-    result = feature.type + ' ' + position
+    result = f'{feature.type} {position}'
     if qualifiers:
-        result += '  ' + '  '.join([f'/{key}="{value}";' for key, value in feature.qualifiers.items()])
+        result += '  ' + "  ".join([f'/{key}="{value}";' for key, value in feature.qualifiers.items()])
     if ide:
         result += '  ' + f'  /id="{feature.id}";'
     return result
@@ -1139,6 +1187,7 @@ def upimapi():
                 make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
             database = f"{'.'.join(database.split('.')[:-1])}.dmnd"
         (b, c) = block_size_and_index_chunks(argsb=args.block_size, argsc=args.index_chunks)
+        '''
         run_diamond(
             args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast', database,
             threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c, e_value=args.evalue,
@@ -1146,6 +1195,7 @@ def upimapi():
         if args.max_target_seqs > 1:
             blast_consensus(f'{args.output}/aligned.blast').to_csv(
                 f'{args.output}/consensus.blast', sep='\t', index=False)
+        '''
         args.input = f'{args.output}/aligned.blast'
         args.blast = True
 
@@ -1176,7 +1226,7 @@ def upimapi():
             ids = set(ids) - set(local_id_mapping(
                 sp_ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
                 table_output, columns=args.columns, databases=args.databases, threads=15))
-
+        ids=ids[:1000]
         if not args.skip_id_checking:
             ids, not_valid = get_valid_entries_multiprocess(ids, api_info, threads=args.threads)
             # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
