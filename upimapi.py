@@ -439,7 +439,8 @@ def uniprot_information_workflow(
         taxids_df = make_taxonomic_lineage_df(result['Taxonomic lineage (Ids)'], prefix='Taxonomic lineage IDs')
         taxids_df = taxids_df[[col for col in taxids_df.columns if col in taxids_cols]]
         result = pd.concat([result, taxids_df], axis=1)
-    del result['index']
+    if 'index' in result.columns:
+        del result['index']
     result.to_csv(output, sep='\t', index=False)
     if len(ids_missing) == 0:
         print(f'Results for all IDs are available at {output}')
