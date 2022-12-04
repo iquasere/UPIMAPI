@@ -29,7 +29,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.6'
+__version__ = '1.8.7'
 
 
 def get_arguments():
@@ -1225,7 +1225,7 @@ def upimapi():
             ids = set(ids) - set(local_id_mapping(
                 sp_ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
                 table_output, columns=args.columns, databases=args.databases, threads=15))
-        ids=ids[:1000]
+
         if not args.skip_id_checking:
             ids, not_valid = get_valid_entries_multiprocess(ids, api_info, threads=args.threads)
             # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
