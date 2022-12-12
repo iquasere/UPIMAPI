@@ -29,7 +29,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.7'
+__version__ = '1.8.8'
 
 
 def get_arguments():
@@ -390,22 +390,24 @@ def extract_lineage_columns(columns):
     return columns, tax_cols, taxids_cols
 
 
-def taxonomic_lineage_to_df(tax_lineage):
-    infos = tax_lineage.split(', ')
-    result = {}
-    for info in infos:
-        value, level = info.split(')')[0].split(' (')
-        if level != 'no rank':
-            result[level] = value
-    return pd.DataFrame(result, index=[0])
-
-
 def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
-    result = pd.DataFrame()
-    for tax_lineage in tqdm(tax_lineage_col, desc='Building taxonomic lineage dataframe'):
-        result = pd.concat([result, taxonomic_lineage_to_df(tax_lineage)])
-    result.columns = [f'{prefix} ({col.upper()})' for col in result.columns]
-    return result.reset_index()
+    """
+    Parses the taxonomic lineage column of the uniprotinfo dataframe and returns a dataframe with the taxonomic lineage
+    separated in columns.
+    :param tax_lineage_col: pd.Series with the taxonomic lineage column of the uniprotinfo dataframe
+    :param prefix: str, prefix to use for the columns of the new dataframe
+    :return: pd.DataFrame with the taxonomic lineage separated in columns
+    """
+    # First, split records by ', '
+    result = pd.DataFrame.from_records(tax_lineage_col.apply(lambda x: x.split(', ')).apply(
+        # Then, split each record by ' ('
+        lambda x: [part[:-1].split(' (') for part in x]).apply(
+        # Finally, build dictionary with the taxonomic level as key and the taxonomy as value. ' ('.join avoids cases
+        # where the taxonomy has a '(' in it (e.g. 'Clostridium scindens (strain JCM 10418 / VPI 12708) (species)')
+        lambda x: {part[-1]: ' ('.join(part[:-1]) for part in x if part[-1] != 'no rank'}))
+    # Rename columns in old UniProt fashion
+    result = result.rename(columns={col: f'{prefix} ({col.upper()})' for col in result.columns})
+    return result
 
 
 def uniprot_information_workflow(
@@ -431,6 +433,7 @@ def uniprot_information_workflow(
             else:
                 print('Failed to retrieve information for some IDs. Retrying request.')
                 tries += 1
+    result.to_csv(output, sep='\t', index=False)
     if len(tax_cols) > 0:
         tax_df = make_taxonomic_lineage_df(result['Taxonomic lineage'], prefix='Taxonomic lineage')
         tax_df = tax_df[[col for col in tax_df.columns if col in tax_cols]]

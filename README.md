@@ -72,14 +72,23 @@ To input a custom database into UPIMAPI, specify it as ```--database path/to/dat
 
 ### Columns of information from UniProt
 
-UniProt provides information for many different fields of information and cross-references. For the user's convenience, a default selection is provided:
-* **default columns:** ```Entry```, ```Entry name```, ```Gene names```, ```Protein names```, ```EC number```, ```Function[CC]```, ```Pathway```, ```Keywords```, ```Protein existence```, ```Gene ontology (GO)```, ```Protein families```, ```Taxonomic lineage```, ```Organism```, ```Organism ID```, ```BioCyc```, ```BRENDA```, ```CDD```, ```eggNOG```, ```Ensembl```, ```InterPro```, ```KEGG```, ```Pfam```, ```Reactome```, ```RefSeq``` and ```UniPathway```
+UniProt provides information for many different fields of information and cross-references. For the user's convenience, a default selection is provided: ```Entry```, ```Entry name```, ```Gene names```, ```Protein names```, ```EC number```, ```Function[CC]```, ```Pathway```, ```Keywords```, ```Protein existence```, ```Gene ontology (GO)```, ```Protein families```, ```Taxonomic lineage```, ```Organism```, ```Organism ID```, ```BioCyc```, ```BRENDA```, ```CDD```, ```eggNOG```, ```Ensembl```, ```InterPro```, ```KEGG```, ```Pfam```, ```Reactome```, ```RefSeq``` and ```UniPathway```
 
 If another selection of columns/databases is desired, it can be specified, for example, as 
 ```
 --columns "Coiled coil&Compositional bias"
 ```
-where ```--columns``` take as input the names of the [columns](https://www.uniprot.org/help/return_fields) required, respectively. The links provided take to the pages of UniProt where the possible columns and databases values are listed.
+where ```--columns``` takes as input the names of the fields of information required. The complete list of fields available can be consulted at [UniProtKB return fields](https://www.uniprot.org/help/return_fields).
+
+#### UPIMAPI offers a few additional columns for taxonomic information
+
+Previous to the Summer 2022 UniProt release, the API provided fields for taxonomic information, but these have been condensed into the ```Taxonomi lineage``` and ```Taxonomic lineage (IDs)``` columns. Since ```1.8.6```, UPIMAPI provides this information again, properly organized. Additional available columns for taxonomy are as follows:
+
+* ```Taxonomic lineage (LEVEL OF TAXONOMY)```: the taxonomic lineage of the organism, with the specified level of taxonomy. For example, ```--columns "Taxonomic lineage (SPECIES)"``` will return the species of the organism. Other possible values are ```SUPERKINGDOM```, ```PHYLUM```, ```CLASS```, ```ORDER```, ```FAMILY```, ```GENUS```, ```SPECIES```, among others.
+
+* ```Taxonomic lineage IDs (LEVEL OF TAXONOMY)```: the TaxIDs of the organism, with the specified level of taxonomy. For example, ```--columns "Taxonomic lineage IDs (SPECIES)"``` will return the TaxID of the species of the organism. Other possible values are as above.
+
+**Warning**: This information may take a while to obtain. Fingers crossed that UniProt will provide this information again in the future.
 
 ## ID mapping without annotation
 
