@@ -1250,7 +1250,7 @@ def upimapi():
             if full_id:
                 blast.sseqid = [ide.split('|')[1] if ide not in ['*', ''] else ide for ide in blast.sseqid]
             result = pd.merge(blast, result, left_on='sseqid', right_on='Entry')
-        sort_columns = ['qseqid'] if args.no_annotation else ['qseqid', 'evalue']
+        sort_columns = ['Entry'] if args.no_annotation else ['qseqid', 'evalue']
         result.sort_values(by=sort_columns, ascending=False).to_csv(
             f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
