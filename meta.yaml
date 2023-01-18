@@ -27,7 +27,6 @@ requirements:
     - firefox
     - lxml
     - geckodriver
-    - pyyaml
 
 test:
   commands:

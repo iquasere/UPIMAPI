@@ -12,7 +12,6 @@ import os
 import sys
 from time import strftime, gmtime, time, sleep
 from subprocess import run, Popen, PIPE, check_output
-import yaml
 from lxml import html
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
@@ -29,7 +28,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.8'
+__version__ = '1.8.9'
 
 
 def get_arguments():
@@ -240,6 +239,8 @@ def get_valid_entries_multiprocess(ids, api_info, step=1000, threads=15):
     for res in result:
         valid_entries += res
     not_valid = set(ids) - set(valid_entries)
+    # take, from the valid IDs, the part after the dot, as this invalidates them
+    valid_entries = [entry.split('.')[0] for entry in valid_entries]
     timed_message(f'{len(valid_entries)} UniProt IDs identified as valid.')
     return valid_entries, not_valid
 
@@ -387,7 +388,7 @@ def extract_lineage_columns(columns):
             columns.append('Taxonomic lineage')
         if len(taxids_cols) > 0:
             columns.append('Taxonomic lineage (IDs)')
-    return columns, tax_cols, taxids_cols
+    return columns, tax_cols, taxids_cols, tax_cols + taxids_cols
 
 
 def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
@@ -416,7 +417,7 @@ def uniprot_information_workflow(
     tries = 0
     last_ids_missing = None
     ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
-    columns, tax_cols, taxids_cols = extract_lineage_columns(columns)
+    columns, tax_cols, taxids_cols, all_tax_cols = extract_lineage_columns(columns)
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
@@ -433,15 +434,16 @@ def uniprot_information_workflow(
             else:
                 print('Failed to retrieve information for some IDs. Retrying request.')
                 tries += 1
-    result.to_csv(output, sep='\t', index=False)
+    tax_df = pd.DataFrame()
     if len(tax_cols) > 0:
         tax_df = make_taxonomic_lineage_df(result['Taxonomic lineage'], prefix='Taxonomic lineage')
-        tax_df = tax_df[[col for col in tax_df.columns if col in tax_cols]]
-        result = pd.concat([result, tax_df], axis=1)
     if len(taxids_cols) > 0:
-        taxids_df = make_taxonomic_lineage_df(result['Taxonomic lineage (Ids)'], prefix='Taxonomic lineage IDs')
-        taxids_df = taxids_df[[col for col in taxids_df.columns if col in taxids_cols]]
-        result = pd.concat([result, taxids_df], axis=1)
+        tax_df = pd.concat([tax_df, make_taxonomic_lineage_df(
+            result['Taxonomic lineage (Ids)'], prefix='Taxonomic lineage IDs')], axis=1)
+    for col in all_tax_cols:
+        if col not in tax_df.columns:
+            tax_df[col] = np.nan
+    result = pd.concat([result, tax_df[all_tax_cols]], axis=1)
     if 'index' in result.columns:
         del result['index']
     result.to_csv(output, sep='\t', index=False)
@@ -1214,6 +1216,14 @@ def upimapi():
     # Get the IDs
     ids, full_id, sp_ids = get_ids(args_input, input_type=input_type, full_id=args.full_id)
 
+    if not args.skip_id_checking:
+        ids, not_valid = get_valid_entries_multiprocess(ids, api_info, threads=args.threads)
+        # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
+        with open(f'{args.output}/valid_ids.txt', 'w') as f:
+            f.write('\n'.join(ids))
+        with open(f'{args.output}/not_valid_ids.txt', 'w') as f:
+            f.write('\n'.join(not_valid))
+
     # Get UniProt information
     if not args.fasta:
         if args.output_table:
@@ -1229,14 +1239,6 @@ def upimapi():
                 sp_ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
-        if not args.skip_id_checking:
-            ids, not_valid = get_valid_entries_multiprocess(ids, api_info, threads=args.threads)
-            # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
-            with open(f'{args.output}/valid_ids.txt', 'w') as f:
-                f.write('\n'.join(ids))
-            with open(f'{args.output}/not_valid_ids.txt', 'w') as f:
-                f.write('\n'.join(not_valid))
-
         # ID mapping through API
         uniprot_information_workflow(
             ids, table_output, api_info, columns_dict, columns=args.columns, step=args.step, max_iter=args.max_tries,
@@ -1247,11 +1249,10 @@ def upimapi():
             if full_id:
                 blast.sseqid = [ide.split('|')[1] if ide not in ['*',''] else ide for ide in blast.sseqid]
             result = pd.merge(blast, pd.read_csv(table_output, sep='\t'), left_on='sseqid', right_on='Entry')
-            result.sort_values(by=['qseqid', 'evalue'], ascending=False).to_csv(
-                f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
+        sort_columns = ['qseqid'] if args.no_annotation else ['qseqid', 'evalue']
+        result.sort_values(by=sort_columns, ascending=False).to_csv(
+            f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
-        if not args.skip_id_checking:
-            ids, not_valid = get_valid_entries_multiprocess(ids, api_info)
         uniprot_fasta_workflow(
             ids, f'{args.output}/uniprotinfo.fasta', api_info, columns_dict, step=args.step, sleep_time=args.sleep)
 

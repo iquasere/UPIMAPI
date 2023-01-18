@@ -14,4 +14,3 @@ dependencies:
     - firefox
     - lxml
     - geckodriver
-    - pyyaml
