@@ -1244,11 +1244,12 @@ def upimapi():
             ids, table_output, api_info, columns_dict, columns=args.columns, step=args.step, max_iter=args.max_tries,
             sleep_time=args.sleep)
 
+        result = pd.read_csv(table_output, sep='\t')
         if not args.no_annotation:
             blast = parse_blast(f'{args.output}/aligned.blast')
             if full_id:
-                blast.sseqid = [ide.split('|')[1] if ide not in ['*',''] else ide for ide in blast.sseqid]
-            result = pd.merge(blast, pd.read_csv(table_output, sep='\t'), left_on='sseqid', right_on='Entry')
+                blast.sseqid = [ide.split('|')[1] if ide not in ['*', ''] else ide for ide in blast.sseqid]
+            result = pd.merge(blast, result, left_on='sseqid', right_on='Entry')
         sort_columns = ['qseqid'] if args.no_annotation else ['qseqid', 'evalue']
         result.sort_values(by=sort_columns, ascending=False).to_csv(
             f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
