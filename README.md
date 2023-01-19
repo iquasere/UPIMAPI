@@ -20,10 +20,6 @@ To install UPIMAPI through Bioconda, run
 ```
 conda install -c conda-forge -c bioconda upimapi
 ```
-Additionally, UPIMAPI requires some apt-get packages so it can do some webscraping. They can be installed with
-```
-apt-get install packagekit-gtk3-module libasound2 libdbus-glib-1-2 libx11-xcb1
-```
 To check if UPIMAPI was installed correctly, run
 ```
 upimapi.py --version

@@ -10,7 +10,3 @@ dependencies:
     - tqdm
     - requests
     - biopython
-    - selenium
-    - firefox
-    - lxml
-    - geckodriver

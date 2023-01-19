@@ -7,14 +7,12 @@ By João Sequeira
 Mar 2020
 """
 
+import json
 from argparse import ArgumentParser, ArgumentTypeError
 import os
 import sys
 from time import strftime, gmtime, time, sleep
 from subprocess import run, Popen, PIPE, check_output
-from lxml import html
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
 import requests
 from psutil import virtual_memory
 from pathlib import Path
@@ -153,13 +151,13 @@ def parse_blast(blast):
 
 
 def string4mapping(columns_dict, columns=None):
-    if columns is None or columns == []:   # if no columns are inputted, UPIMAPI uses defaults
+    if columns is None or columns == []:    # if no columns are inputted, UPIMAPI uses defaults
         columns = [
             'Entry', 'Entry name', 'Gene names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
             'Protein existence', 'Gene ontology (GO)', 'Protein families', 'Taxonomic lineage',
             'Taxonomic lineage (IDs)', 'Organism', 'Organism ID', 'BioCyc', 'BRENDA', 'CDD', 'eggNOG', 'Ensembl',
             'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway']
-    for col in ['Entry name', 'Entry']:
+    for col in ['Entry name', 'Entry']:     # UPIMAPI requires these two columns to be present
         if col not in columns:
             columns.insert(0, col)
     return ','.join([columns_dict[column] for column in columns])
@@ -1149,22 +1147,12 @@ def load_api_info():
 
 
 def get_uniprot_columns():
-    firefox_options = Options()
-    firefox_options.add_argument("--headless")
-    print('Updating UniProt columns options')
-    driver = webdriver.Firefox(options=firefox_options)
-    driver.get('https://www.uniprot.org/help/return_fields')
-    tree = html.fromstring(driver.page_source)
-    tables = tree.getchildren()[1].getchildren()[0].getchildren()[0].getchildren()[2].getchildren()[0].getchildren(
-    )[0].getchildren()[1].getchildren()[0].getchildren()[0].getchildren()[0].findall('table')
+    json_string = requests.get('https://rest.uniprot.org/configure/uniprotkb/result-fields').text
+    obj = json.loads(json_string)
     result = {}
-    for table in tables:
-        rows = table.getchildren()[1].getchildren()
-        for row in rows:
-            k, l, v = row.getchildren()  # l is for legacy
-            result[k.text] = v.text
-    result = {k: v for k, v in result.items() if v != '<does not exist>'}
-    driver.quit()
+    for i in range(len(obj)):
+        for col in obj[i]['fields']:
+            result[col['label']] = col['name']
     return result
 
 
