@@ -151,18 +151,23 @@ def parse_blast(blast):
 
 
 def string4mapping(columns_dict, columns=None):
+    # all columns to lower case
+    columns_dict = {k.lower(): v for k, v in columns_dict.items()}
     if columns is None or columns == []:    # if no columns are inputted, UPIMAPI uses defaults
         valid_columns = [
-            'Entry', 'Entry Name', 'Gene names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
-            'Protein existence', 'Gene ontology (GO)', 'Protein families', 'Taxonomic lineage',
-            'Taxonomic lineage (IDs)', 'Organism', 'Organism ID', 'BioCyc', 'BRENDA', 'CDD', 'eggNOG', 'Ensembl',
-            'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway']
+            'entry', 'entry name', 'gene names', 'protein names', 'ec number', 'function [cc]', 'pathway', 'keywords',
+            'protein existence', 'gene ontology (go)', 'protein families', 'taxonomic lineage',
+            'taxonomic lineage (ids)', 'organism', 'organism (id)', 'biocyc', 'brenda', 'cdd', 'eggnog', 'ensembl',
+            'interpro', 'kegg', 'pfam', 'reactome', 'refseq', 'unipathway']
     else:                                   # check what columns are valid
+        columns = [col.lower() for col in columns]
         valid_columns = [column for column in columns if column in columns_dict.keys()]
         invalid_columns = [column for column in columns if column not in columns_dict.keys()]
         for col in invalid_columns:
-            print(f'WARNING: [{col}] is not a valid column name. Check https://www.uniprot.org/help/return_fields.')
-    for col in ['Entry', 'Entry Name']:     # UPIMAPI requires these two columns to be present
+            print(f'WARNING: [{col}] is not a valid column name (lower case is not the issue). '
+                  f'Check https://www.uniprot.org/help/return_fields (Label* column) for valid column names '
+                  f'or raise an issue at https://github.com/iquasere/UPIMAPI/issues')
+    for col in ['entry', 'entry name']:     # UPIMAPI requires these two columns to be present
         if col not in valid_columns:
             valid_columns.insert(0, col)
     return ','.join([columns_dict[column] for column in valid_columns])
