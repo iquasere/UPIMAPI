@@ -26,7 +26,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.9'
+__version__ = '1.8.10'
 
 
 def get_arguments():
@@ -152,15 +152,20 @@ def parse_blast(blast):
 
 def string4mapping(columns_dict, columns=None):
     if columns is None or columns == []:    # if no columns are inputted, UPIMAPI uses defaults
-        columns = [
-            'Entry', 'Entry name', 'Gene names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
+        valid_columns = [
+            'Entry', 'Entry Name', 'Gene names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
             'Protein existence', 'Gene ontology (GO)', 'Protein families', 'Taxonomic lineage',
             'Taxonomic lineage (IDs)', 'Organism', 'Organism ID', 'BioCyc', 'BRENDA', 'CDD', 'eggNOG', 'Ensembl',
             'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway']
-    for col in ['Entry name', 'Entry']:     # UPIMAPI requires these two columns to be present
-        if col not in columns:
-            columns.insert(0, col)
-    return ','.join([columns_dict[column] for column in columns])
+    else:                                   # check what columns are valid
+        valid_columns = [column for column in columns if column in columns_dict.keys()]
+        invalid_columns = [column for column in columns if column not in columns_dict.keys()]
+        for col in invalid_columns:
+            print(f'WARNING: [{col}] is not a valid column name. Check https://www.uniprot.org/help/return_fields.')
+    for col in ['Entry', 'Entry Name']:     # UPIMAPI requires these two columns to be present
+        if col not in valid_columns:
+            valid_columns.insert(0, col)
+    return ','.join([columns_dict[column] for column in valid_columns])
 
 
 def parallelize(data, func, num_of_processes=8):
@@ -1147,8 +1152,8 @@ def load_api_info():
 
 
 def get_uniprot_columns():
-    json_string = requests.get('https://rest.uniprot.org/configure/uniprotkb/result-fields').text
-    obj = json.loads(json_string)
+    res = get_url('https://rest.uniprot.org/configure/uniprotkb/result-fields')
+    obj = json.loads(res.text)
     result = {}
     for i in range(len(obj)):
         for col in obj[i]['fields']:
