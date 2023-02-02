@@ -23,10 +23,6 @@ requirements:
     - tqdm
     - requests
     - biopython
-    - selenium
-    - firefox
-    - lxml
-    - geckodriver
 
 test:
   commands:

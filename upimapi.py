@@ -26,7 +26,7 @@ from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
 
-__version__ = '1.8.10'
+__version__ = '1.8.11'
 
 
 def get_arguments():
@@ -472,7 +472,23 @@ def determine_full_id(ids):
     return False
 
 
-def get_ids(args_input, input_type='blast', full_id='auto'):
+def parse_fasta(file):
+    with open(file) as f:
+        lines = [line.rstrip('\n') for line in f]
+    i = 0
+    sequences = {}
+    while i < len(lines):
+        if lines[i].startswith('>'):
+            name = lines[i][1:]
+            sequences[name] = ''
+            i += 1
+            while i < len(lines) and not lines[i].startswith('>'):
+                sequences[name] += lines[i]
+                i += 1
+    return sequences
+
+
+def get_ids(args_input, input_type, full_id='auto'):
     if input_type == 'blast':
         ids = parse_blast(args_input)['sseqid'].tolist()
     elif input_type == 'txt':
@@ -481,6 +497,8 @@ def get_ids(args_input, input_type='blast', full_id='auto'):
             preids = f.read().split('\n')
         for preid in preids:
             ids += preid.split(',')
+    elif input_type == 'fasta':
+        ids = parse_fasta(args_input).keys()
     else:       # if PIPE
         ids = args_input.split(',')
     if full_id == 'auto':
@@ -1091,12 +1109,14 @@ def local_id_mapping(ids, sp_dat, tax_tsv, output, columns=None, databases=None,
     return ids_found
 
 
-def get_input_type(input_ids, blast=True):
-    if input_ids is None:
+def get_input_type(args_input, blast=True):
+    if args_input is None:
         return input('IDs to perform mapping on (comma separated values):'), 'stdin'
     if blast:
-        return input_ids, 'blast'
-    return input_ids, 'txt'
+        return args_input, 'blast'
+    if check_output(f"head -c 1 {args_input}", shell=True).decode('utf8') == '>':
+        return args_input, 'fasta'
+    return args_input, 'txt'
 
 
 def check_no_annotation(args_input, no_annotation):
@@ -1104,15 +1124,9 @@ def check_no_annotation(args_input, no_annotation):
         is_fasta = False
     else:
         is_fasta = check_output(f"head -c 1 {args_input}", shell=True).decode('utf8') == '>'
-    change = False
-    if is_fasta:
-        if no_annotation:
-            change = str2bool(input(
-                'File seems to be FASTA, but you choose to not perform annotation! '
-                'Do you want to perform annotation? [Y/N] '))
     if not is_fasta:
         no_annotation = True
-    return not no_annotation if change else no_annotation
+    return no_annotation
 
 
 def blast_consensus(alignment_file):
