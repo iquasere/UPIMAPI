@@ -25,8 +25,9 @@ from datetime import datetime
 from Bio import SwissProt as SP
 import numpy as np
 from functools import partial
+import re
 
-__version__ = '1.8.11'
+__version__ = '1.8.12'
 
 
 def get_arguments():
@@ -158,7 +159,7 @@ def string4mapping(columns_dict, columns=None):
             'entry', 'entry name', 'gene names', 'protein names', 'ec number', 'function [cc]', 'pathway', 'keywords',
             'protein existence', 'gene ontology (go)', 'protein families', 'taxonomic lineage',
             'taxonomic lineage (ids)', 'organism', 'organism (id)', 'biocyc', 'brenda', 'cdd', 'eggnog', 'ensembl',
-            'interpro', 'kegg', 'pfam', 'reactome', 'refseq', 'unipathway']
+            'interpro', 'kegg', 'pfam', 'reactome', 'refseq', 'unipathway', 'organism']
     else:                                   # check what columns are valid
         columns = [col.lower() for col in columns]
         valid_columns = [column for column in columns if column in columns_dict.keys()]
@@ -389,13 +390,13 @@ def check_ids_already_done(output, ids):
 def extract_lineage_columns(columns):
     tax_cols, taxids_cols = [], []
     if columns is not None:
-        tax_cols = [col for col in columns if ('Taxonomic lineage (' in col and col != 'Taxonomic lineage (IDs)')]
-        taxids_cols = [col for col in columns if ('Taxonomic lineage IDs (' in col)]
+        tax_cols = [col for col in columns if ('taxonomic lineage (' in col and col != 'taxonomic lineage (ids)')]
+        taxids_cols = [col for col in columns if ('taxonomic lineage ids (' in col)]
         columns = [col for col in columns if col not in tax_cols + taxids_cols]
         if len(tax_cols) > 0:
-            columns.append('Taxonomic lineage')
+            columns.append('taxonomic lineage')
         if len(taxids_cols) > 0:
-            columns.append('Taxonomic lineage (IDs)')
+            columns.append('taxonomic lineage (ids)')
     return columns, tax_cols, taxids_cols, tax_cols + taxids_cols
 
 
@@ -408,7 +409,8 @@ def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
     :return: pd.DataFrame with the taxonomic lineage separated in columns
     """
     # First, split records by ', '
-    result = pd.DataFrame.from_records(tax_lineage_col.apply(lambda x: x.split(', ')).apply(
+    split_regex = r"(?<=\)),"
+    result = pd.DataFrame.from_records(tax_lineage_col.apply(lambda x: re.split(split_regex, x)).apply(
         # Then, split each record by ' ('
         lambda x: [part[:-1].split(' (') for part in x]).apply(
         # Finally, build dictionary with the taxonomic level as key and the taxonomy as value. ' ('.join avoids cases
@@ -422,18 +424,29 @@ def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
 def uniprot_information_workflow(
         ids, output, api_info, columns_dict, max_iter=5, columns=None, step=1000, sleep_time=10):
     ids_done, ids_missing, result = check_ids_already_done(output, ids)
+    add_tax_cols = columns is None
     tries = 0
     last_ids_missing = None
     ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
     columns, tax_cols, taxids_cols, all_tax_cols = extract_lineage_columns(columns)
+    default_tax_cols = [
+        'Taxonomic lineage (SUPERKINGDOM)', 'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)',
+        'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 'Taxonomic lineage (GENUS)']
+    if add_tax_cols:
+        tax_cols += default_tax_cols
+        all_tax_cols += default_tax_cols
+    print(tax_cols)
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
         uniprotinfo = get_uniprot_information(
             ids_missing, api_info, columns_dict, step=step, columns=columns, max_tries=max_iter, sleep_time=sleep_time)
+        uniprotinfo.reset_index(inplace=True)
+        del uniprotinfo['index']
         if len(uniprotinfo) > 0:
             ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry Name'].tolist()))
             result = pd.concat([result, uniprotinfo], ignore_index=True)
+            print(result)
         ids_missing = list(set(last_ids_missing) - set(ids_done))
         if len(ids_missing) > 0:
             if last_ids_missing == ids_missing:
@@ -451,10 +464,16 @@ def uniprot_information_workflow(
     for col in all_tax_cols:
         if col not in tax_df.columns:
             tax_df[col] = np.nan
-    result = pd.concat([result, tax_df[all_tax_cols]], axis=1)
+    print(tax_df)
+    result = pd.concat([result, tax_df[all_tax_cols]], axis=1).rename(columns={
+        'Organism.1': 'Taxonomic lineage (SPECIES)'})
+    cols = result.columns.tolist()
+    cols.remove('Taxonomic lineage (SPECIES)')
+    cols.append('Taxonomic lineage (SPECIES)')
+    print(result[cols])
     if 'index' in result.columns:
         del result['index']
-    result.to_csv(output, sep='\t', index=False)
+    result[cols].to_csv(output, sep='\t', index=False)
     if len(ids_missing) == 0:
         print(f'Results for all IDs are available at {output}')
     else:
