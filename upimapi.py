@@ -463,7 +463,7 @@ def uniprot_information_workflow(
         if col not in tax_df.columns:
             tax_df[col] = np.nan
     result = pd.concat([result, tax_df[all_tax_cols]], axis=1).rename(columns={
-        'Organism.1': 'Taxonomic lineage (SPECIES)'})
+        'Organism': 'Taxonomic lineage (SPECIES)'})
     cols = result.columns.tolist()
     if 'Taxonomic lineage (SPECIES)' in cols:
         cols.remove('Taxonomic lineage (SPECIES)')
