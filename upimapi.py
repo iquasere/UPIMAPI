@@ -159,7 +159,7 @@ def string4mapping(columns_dict, columns=None):
             'entry', 'entry name', 'gene names', 'protein names', 'ec number', 'function [cc]', 'pathway', 'keywords',
             'protein existence', 'gene ontology (go)', 'protein families', 'taxonomic lineage',
             'taxonomic lineage (ids)', 'organism', 'organism (id)', 'biocyc', 'brenda', 'cdd', 'eggnog', 'ensembl',
-            'interpro', 'kegg', 'pfam', 'reactome', 'refseq', 'unipathway', 'organism']
+            'interpro', 'kegg', 'pfam', 'reactome', 'refseq', 'unipathway']
     else:                                   # check what columns are valid
         columns = [col.lower() for col in columns]
         valid_columns = [column for column in columns if column in columns_dict.keys()]
@@ -435,7 +435,6 @@ def uniprot_information_workflow(
     if add_tax_cols:
         tax_cols += default_tax_cols
         all_tax_cols += default_tax_cols
-    print(tax_cols)
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
@@ -446,7 +445,6 @@ def uniprot_information_workflow(
         if len(uniprotinfo) > 0:
             ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry Name'].tolist()))
             result = pd.concat([result, uniprotinfo], ignore_index=True)
-            print(result)
         ids_missing = list(set(last_ids_missing) - set(ids_done))
         if len(ids_missing) > 0:
             if last_ids_missing == ids_missing:
@@ -464,13 +462,12 @@ def uniprot_information_workflow(
     for col in all_tax_cols:
         if col not in tax_df.columns:
             tax_df[col] = np.nan
-    print(tax_df)
     result = pd.concat([result, tax_df[all_tax_cols]], axis=1).rename(columns={
         'Organism.1': 'Taxonomic lineage (SPECIES)'})
     cols = result.columns.tolist()
-    cols.remove('Taxonomic lineage (SPECIES)')
-    cols.append('Taxonomic lineage (SPECIES)')
-    print(result[cols])
+    if 'Taxonomic lineage (SPECIES)' in cols:
+        cols.remove('Taxonomic lineage (SPECIES)')
+        cols.append('Taxonomic lineage (SPECIES)')
     if 'index' in result.columns:
         del result['index']
     result[cols].to_csv(output, sep='\t', index=False)
@@ -921,7 +918,7 @@ def parse_description_text(description):
                 result['Flags'] = [parted[1]]
             i += 1
         else:
-            #print('A description UPIMAPI cannot yet handle!')      # TODO - can't parse EC numbers? And some "Includes: RecName:"
+            #print('A description UPIMAPI cannot yet handle!')
             #print(parts[i])
             i += 1
     return result
