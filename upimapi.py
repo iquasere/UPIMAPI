@@ -465,12 +465,14 @@ def uniprot_information_workflow(
                 tax_df[col] = np.nan
         uniprotinfo = pd.concat([uniprotinfo, tax_df[all_tax_cols]], axis=1).rename(columns={
             'Organism': 'Taxonomic lineage (SPECIES)'})
-        cols = result.columns.tolist()
+        cols = list(set(result.columns.tolist() + uniprotinfo.columns.tolist()))
         if 'Taxonomic lineage (SPECIES)' in cols:
             cols.remove('Taxonomic lineage (SPECIES)')
             cols.append('Taxonomic lineage (SPECIES)')
         if 'index' in result.columns:
             del result['index']
+    else:
+        cols = result.columns.tolist()
     result = pd.concat([result, uniprotinfo], ignore_index=True)
     result[cols].to_csv(output, sep='\t', index=False)
     if len(ids_missing) == 0:
