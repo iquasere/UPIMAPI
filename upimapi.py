@@ -27,7 +27,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.8.12'
+__version__ = '1.8.13'
 
 
 def get_arguments():
@@ -425,8 +425,7 @@ def uniprot_information_workflow(
         ids, output, api_info, columns_dict, max_iter=5, columns=None, step=1000, sleep_time=10):
     ids_done, ids_missing, result = check_ids_already_done(output, ids)
     add_tax_cols = columns is None
-    tries = 0
-    last_ids_missing = None
+    tries, last_ids_missing = 0, None
     ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
     columns, tax_cols, taxids_cols, all_tax_cols = extract_lineage_columns(columns)
     default_tax_cols = [
@@ -435,16 +434,17 @@ def uniprot_information_workflow(
     if add_tax_cols:
         tax_cols += default_tax_cols
         all_tax_cols += default_tax_cols
+    uniprotinfo = pd.DataFrame()
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
-        uniprotinfo = get_uniprot_information(
+        info = get_uniprot_information(
             ids_missing, api_info, columns_dict, step=step, columns=columns, max_tries=max_iter, sleep_time=sleep_time)
-        uniprotinfo.reset_index(inplace=True)
-        del uniprotinfo['index']
-        if len(uniprotinfo) > 0:
-            ids_done += list(set(uniprotinfo['Entry'].tolist() + uniprotinfo['Entry Name'].tolist()))
-            result = pd.concat([result, uniprotinfo], ignore_index=True)
+        info.reset_index(inplace=True)
+        del info['index']
+        if len(info) > 0:
+            ids_done += list(set(info['Entry'].tolist() + info['Entry Name'].tolist()))
+            uniprotinfo = pd.concat([uniprotinfo, info], ignore_index=True)
         ids_missing = list(set(last_ids_missing) - set(ids_done))
         if len(ids_missing) > 0:
             if last_ids_missing == ids_missing:
@@ -453,23 +453,25 @@ def uniprot_information_workflow(
             else:
                 print('Failed to retrieve information for some IDs. Retrying request.')
                 tries += 1
-    tax_df = pd.DataFrame()
-    if len(tax_cols) > 0:
-        tax_df = make_taxonomic_lineage_df(result['Taxonomic lineage'], prefix='Taxonomic lineage')
-    if len(taxids_cols) > 0:
-        tax_df = pd.concat([tax_df, make_taxonomic_lineage_df(
-            result['Taxonomic lineage (Ids)'], prefix='Taxonomic lineage IDs')], axis=1)
-    for col in all_tax_cols:
-        if col not in tax_df.columns:
-            tax_df[col] = np.nan
-    result = pd.concat([result, tax_df[all_tax_cols]], axis=1).rename(columns={
-        'Organism': 'Taxonomic lineage (SPECIES)'})
-    cols = result.columns.tolist()
-    if 'Taxonomic lineage (SPECIES)' in cols:
-        cols.remove('Taxonomic lineage (SPECIES)')
-        cols.append('Taxonomic lineage (SPECIES)')
-    if 'index' in result.columns:
-        del result['index']
+    if len(uniprotinfo) > 0:
+        tax_df = pd.DataFrame()
+        if len(tax_cols) > 0:
+            tax_df = make_taxonomic_lineage_df(uniprotinfo['Taxonomic lineage'], prefix='Taxonomic lineage')
+        if len(taxids_cols) > 0:
+            tax_df = pd.concat([tax_df, make_taxonomic_lineage_df(
+                uniprotinfo['Taxonomic lineage (Ids)'], prefix='Taxonomic lineage IDs')], axis=1)
+        for col in all_tax_cols:
+            if col not in tax_df.columns:
+                tax_df[col] = np.nan
+        uniprotinfo = pd.concat([uniprotinfo, tax_df[all_tax_cols]], axis=1).rename(columns={
+            'Organism': 'Taxonomic lineage (SPECIES)'})
+        cols = result.columns.tolist()
+        if 'Taxonomic lineage (SPECIES)' in cols:
+            cols.remove('Taxonomic lineage (SPECIES)')
+            cols.append('Taxonomic lineage (SPECIES)')
+        if 'index' in result.columns:
+            del result['index']
+    result = pd.concat([result, uniprotinfo], ignore_index=True)
     result[cols].to_csv(output, sep='\t', index=False)
     if len(ids_missing) == 0:
         print(f'Results for all IDs are available at {output}')
@@ -1271,8 +1273,8 @@ def upimapi():
         uniprot_information_workflow(
             ids, table_output, api_info, columns_dict, columns=args.columns, step=args.step, max_iter=args.max_tries,
             sleep_time=args.sleep)
+        result = pd.read_csv(table_output, sep='\t', low_memory=False)
 
-        result = pd.read_csv(table_output, sep='\t')
         if not args.no_annotation:
             blast = parse_blast(f'{args.output}/aligned.blast')
             if full_id:
