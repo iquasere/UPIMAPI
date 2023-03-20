@@ -27,7 +27,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.8.13'
+__version__ = '1.8.14'
 
 
 def get_arguments():
@@ -165,7 +165,7 @@ def string4mapping(columns_dict, columns=None):
         valid_columns = [column for column in columns if column in columns_dict.keys()]
         invalid_columns = [column for column in columns if column not in columns_dict.keys()]
         for col in invalid_columns:
-            print(f'WARNING: [{col}] is not a valid column name (lower case is not the issue). '
+            print(f'WARNING: "{col}" is not a valid column name (lower case is not the issue). '
                   f'Check https://www.uniprot.org/help/return_fields (Label* column) for valid column names '
                   f'or raise an issue at https://github.com/iquasere/UPIMAPI/issues')
     for col in ['entry', 'entry name']:     # UPIMAPI requires these two columns to be present
@@ -390,13 +390,13 @@ def check_ids_already_done(output, ids):
 def extract_lineage_columns(columns):
     tax_cols, taxids_cols = [], []
     if columns is not None:
-        tax_cols = [col for col in columns if ('taxonomic lineage (' in col and col != 'taxonomic lineage (ids)')]
-        taxids_cols = [col for col in columns if ('taxonomic lineage ids (' in col)]
+        tax_cols = [col for col in columns if ('Taxonomic lineage (' in col and col != 'Taxonomic lineage (Ids)')]
+        taxids_cols = [col for col in columns if ('Taxonomic lineage IDs (' in col)]
         columns = [col for col in columns if col not in tax_cols + taxids_cols]
         if len(tax_cols) > 0:
-            columns.append('taxonomic lineage')
+            columns.append('Taxonomic lineage')
         if len(taxids_cols) > 0:
-            columns.append('taxonomic lineage (ids)')
+            columns.append('Taxonomic lineage (Ids)')
     return columns, tax_cols, taxids_cols, tax_cols + taxids_cols
 
 

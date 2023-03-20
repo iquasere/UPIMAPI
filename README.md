@@ -80,7 +80,7 @@ where ```--columns``` takes as input the names of the fields of information requ
 
 Previous to the Summer 2022 UniProt release, the API provided fields for taxonomic information, but these have been condensed into the ```Taxonomic lineage``` and ```Taxonomic lineage (IDs)``` columns. Since ```1.8.6```, UPIMAPI provides this information again, properly organized. Additional available columns for taxonomy are as follows:
 
-* ```Taxonomic lineage (LEVEL OF TAXONOMY)```: the taxonomic lineage of the organism, with the specified level of taxonomy. For example, ```--columns "Taxonomic lineage (SPECIES)"``` will return the species of the organism. Other possible values are ```SUPERKINGDOM```, ```PHYLUM```, ```CLASS```, ```ORDER```, ```FAMILY```, ```GENUS```, ```SPECIES```, among others.
+* ```Taxonomic lineage (LEVEL OF TAXONOMY)```: the taxonomic lineage of the organism, with the specified level of taxonomy. For example, ```--columns "Taxonomic lineage (SPECIES)"``` will return the species of the organism. Other possible values are ```SUPERKINGDOM```, ```PHYLUM```, ```CLASS```, ```ORDER```, ```FAMILY```, ```GENUS```, ```SPECIES```, [among others](https://en.wikipedia.org/wiki/Taxonomic_rank).
 
 * ```Taxonomic lineage IDs (LEVEL OF TAXONOMY)```: the TaxIDs of the organism, with the specified level of taxonomy. For example, ```--columns "Taxonomic lineage IDs (SPECIES)"``` will return the TaxID of the species of the organism. Other possible values are as above.
 
