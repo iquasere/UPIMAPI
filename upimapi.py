@@ -27,7 +27,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.8.14'
+__version__ = '1.9.0'
 
 
 def get_arguments():
@@ -661,12 +661,12 @@ def build_reference_database(database, output_folder, taxids=None, max_tries=3):
         run_command(f'gunzip {output_folder}/uniprot_sprot.fasta.gz')
     elif database == 'taxids':
         for taxid in tqdm(taxids, desc=f'Retrieving reference proteomes for {len(taxids)} taxa from UniProt.'):
-            with open(f'{output_folder}/upimapi_database.fasta', 'a') as f:
+            with open(f'{output_folder}/taxids_database.fasta', 'a') as f:
                 f.write(get_proteome_for_taxid(taxid, max_tries=max_tries))
 
 
 def must_build_database(database, resources_folder):
-    db2suffix = {'uniprot': 'uniprot.fasta', 'swissprot': 'uniprot_sprot.fasta', 'taxids': 'upimapi_database.fasta'}
+    db2suffix = {'uniprot': 'uniprot.fasta', 'swissprot': 'uniprot_sprot.fasta', 'taxids': 'taxids_database.fasta'}
     if database in db2suffix.keys():
         if os.path.isfile(f'{resources_folder}/{db2suffix[database]}'):
             return str2bool(input(f'{resources_folder}/{db2suffix[database]} exists. Overwrite? [Y/N] '))
@@ -1210,7 +1210,7 @@ def upimapi():
     if not args.no_annotation:
         db2file = {'uniprot': f'{args.resources_directory}/uniprot.fasta',
                    'swissprot': f'{args.resources_directory}/uniprot_sprot.fasta',
-                   'taxids': f'{args.resources_directory}/upimapi_database.fasta'}
+                   'taxids': f'{args.resources_directory}/taxids_database.fasta'}
         if args.database in db2file.keys():
             database = db2file[args.database]
         else:
@@ -1220,10 +1220,10 @@ def upimapi():
             if must_build_database(args.database, args.resources_directory):
                 build_reference_database(
                     args.database, args.resources_directory, taxids=args.taxids, max_tries=args.max_tries)
-        if not database.endswith(".dmnd"):
-            if not os.path.isfile(f"{'.'.join(database.split('.')[:-1])}.dmnd"):
-                make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
-            database = f"{'.'.join(database.split('.')[:-1])}.dmnd"
+                if not database.endswith(".dmnd"):
+                    if not os.path.isfile(f"{'.'.join(database.split('.')[:-1])}.dmnd"):
+                        make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
+                    database = f"{'.'.join(database.split('.')[:-1])}.dmnd"
         (b, c) = block_size_and_index_chunks(argsb=args.block_size, argsc=args.index_chunks)
         run_diamond(
             args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast', database,
