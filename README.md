@@ -22,7 +22,7 @@ conda install -c conda-forge -c bioconda upimapi
 ```
 To check if UPIMAPI was installed correctly, run
 ```
-upimapi.py --version
+upimapi --version
 ```
 
 ## Annotation with UPIMAPI
@@ -30,7 +30,7 @@ upimapi.py --version
 UPIMAPI can be used to perform homology-based annotation with DIAMOND. Main advantages of using UPIMAPI are that it determines optimal values for the most important search parameters, and directly links annotation to UniProt ID mapping.
 To annotate protein sequences and get information from UniProt, UPIMAPI can be run as
 ```
-upimapi.py -i path/to/sequences.fasta -o path/to/output_directory -db database -t threads
+upimapi -i path/to/sequences.fasta -o path/to/output_directory -db database -t threads
 ```
 where:
 * ```sequences.fasta``` is a FASTA file with aminoacid sequences of query proteins
@@ -92,14 +92,14 @@ If only retrieval of information from UniProt is required (no annotation step), 
 
 The result of an annotation with some database with UniProt IDs can be directy inputted for ID mapping with the command
 ```
-upimapi.py -i aligned.blast -o output_directory --blast
+upimapi -i aligned.blast -o output_directory --blast
 ```
 
 ### CSV file
 
 A CSV file with UniProt IDs (separated by commas) can be inputted to UPIMAPI with the command
 ```
-upimapi.py -i ids.txt -o output_directory
+upimapi -i ids.txt -o output_directory
 ```
 This repo provides an [example](https://github.com/iquasere/UPIMAPI/blob/master/ids.txt) of this file.
 
@@ -107,7 +107,7 @@ This repo provides an [example](https://github.com/iquasere/UPIMAPI/blob/master/
 
 IDs can also be directly inputted through the command line by not specifying an input. They must be inputted as a comma separated value:
 ```
->>> upimapi.py -o output_directory
+>>> upimapi -o output_directory
 
 IDs to perform mapping on (comma separated values):
 ```
