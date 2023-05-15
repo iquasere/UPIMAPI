@@ -27,7 +27,7 @@ jobs:
           name: upimapi
           path: /tmp/upimapi.tar
 
-   txt-file-comma-separated:
+  txt-file-comma-separated:
     runs-on: ubuntu-latest
     needs: build
     steps:
@@ -43,7 +43,7 @@ jobs:
       - name: IDs inputted through TXT file (comma-separated)
         run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation -cols 'Entry&KEGG&Interacts with'"
 
-   txt-file-newline-separated:
+  txt-file-newline-separated:
     runs-on: ubuntu-latest
     needs: build
     steps:
@@ -59,7 +59,7 @@ jobs:
       - name: Full IDs inputted through TXT file (newline-separated)
         run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/full_ids.txt -rd resources_directory --no-annotation"
 
-   blast-file:
+  blast-file:
     runs-on: ubuntu-latest
     needs: build
     steps:
