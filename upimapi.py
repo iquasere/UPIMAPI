@@ -27,7 +27,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.9.0'
+__version__ = '1.10.0'
 
 
 def get_arguments():
@@ -77,6 +77,9 @@ def get_arguments():
     parser.add_argument(
         "--skip-db-check", action="store_true", default=False,
         help="So UPIMAPI doesn't check for (FASTA) database existence [false]")
+    parser.add_argument(
+        "--mirror", choices=['expasy', 'uniprot', 'ebi'], default='expasy',
+        help="From where to download UniProt database [expasy]")
     parser.add_argument('-v', '--version', action='version', version=f'UPIMAPI {__version__}')
 
     diamond_args = parser.add_argument_group('DIAMOND arguments')
@@ -628,7 +631,7 @@ def download_with_progress_bar(url, output_folder):
     # Streaming, so we can iterate over the response.
     response = requests.get(url, stream=True)
     total_size_in_bytes = int(response.headers.get('content-length', 0))
-    block_size = 1024  # 1 Kibibyte
+    block_size = 102400  # 100 Kibibytes
     progress_bar = tqdm(total=total_size_in_bytes, unit='iB', unit_scale=True, desc=f'Downloading {url.split("/")[-1]}')
     with open(f'{output_folder}/{url.split("/")[-1]}', 'wb') as file:
         for data in response.iter_content(block_size):
@@ -637,23 +640,25 @@ def download_with_progress_bar(url, output_folder):
     progress_bar.close()
 
 
-def download_uniprot(output_folder):
-    for url in [
-        "https://ftp.uniprot.org/pub/databases/uniprot/knowledgebase/complete/uniprot_sprot.fasta.gz",
-        "https://ftp.uniprot.org/pub/databases/uniprot/knowledgebase/complete/uniprot_trembl.fasta.gz",
-        "https://ftp.uniprot.org/pub/databases/uniprot/knowledgebase/complete/reldate.txt"
-    ]:
-        print(f'Downloading and writing: {url}')
-        download_with_progress_bar(url, output_folder)
+def download_uniprot(output_folder, mirror='expasy'):
+    base_urls = {
+        'expasy': 'https://ftp.expasy.org',
+        'uniprot': 'https://ftp.uniprot.org/pub',
+        'ebi': 'https://ftp.ebi.ac.uk/pub'
+    }
+    for file in ["uniprot_sprot.fasta.gz", "uniprot_trembl.fasta.gz", "reldate.txt"]:
+        print(f'Downloading and writing: {file}')
+        download_with_progress_bar(
+            f'{base_urls[mirror]}/databases/uniprot/current_release/knowledgebase/complete/{file}', output_folder)
     run_pipe_command(f'zcat {output_folder}/uniprot_trembl.fasta.gz {output_folder}/uniprot_sprot.fasta.gz > '
                      f'{output_folder}/uniprot.fasta')
     for file in [f'{output_folder}/uniprot_trembl.fasta.gz', f'{output_folder}/uniprot_sprot.fasta.gz']:
         os.remove(file)
 
 
-def build_reference_database(database, output_folder, taxids=None, max_tries=3):
+def build_reference_database(database, output_folder, taxids=None, max_tries=3, mirror='expasy'):
     if database == 'uniprot':
-        download_uniprot(output_folder)
+        download_uniprot(output_folder, mirror=mirror)
     elif database == 'swissprot':
         download_with_progress_bar(
             "https://ftp.uniprot.org/pub/databases/uniprot/knowledgebase/complete/uniprot_sprot.fasta.gz",
@@ -1219,7 +1224,8 @@ def upimapi():
         if not args.skip_db_check:
             if must_build_database(args.database, args.resources_directory):
                 build_reference_database(
-                    args.database, args.resources_directory, taxids=args.taxids, max_tries=args.max_tries)
+                    args.database, args.resources_directory, taxids=args.taxids, max_tries=args.max_tries,
+                    mirror=args.mirror)
                 if not database.endswith(".dmnd"):
                     if not os.path.isfile(f"{'.'.join(database.split('.')[:-1])}.dmnd"):
                         make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
