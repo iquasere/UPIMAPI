@@ -27,7 +27,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.10.0'
+__version__ = '1.11.0'
 
 
 def get_arguments():
@@ -104,13 +104,18 @@ def get_arguments():
         "-mts", "--max-target-seqs", type=int, default=1,
         help="Number of annotations to output per sequence inputed [1]")
     diamond_args.add_argument(
-        "-b", "--block-size", type=int,
-        help="Billions of sequence letters to be processed at a time (default: auto determine best value)")
+        "-b", "--block-size", type=float,
+        help="Billions of sequence letters to be processed at a time [memory / 20]")
     diamond_args.add_argument(
         "-c", "--index-chunks", type=int,
-        help="Number of chunks for processing the seed index (default: auto determine best value)")
+        help="Number of chunks for processing the seed index [dependant on block size]")
+    diamond_args.add_argument(
+        "--max-memory", type=float, default=virtual_memory().available, help="Maximum memory to use [all available]")
     diamond_args.add_argument(
         "--taxids", default=None, help="Tax IDs to obtain protein sequences of for building a reference database.")
+    diamond_args.add_argument(
+        '--diamond-mode', help="Mode to run DIAMOND with [fast]", default='fast',
+        choices=['fast', 'mid_sensitive', 'sensitive', 'more_sensitive', 'very_sensitive', 'ultra_sensitive'])
     args = parser.parse_args()
     args.output = args.output.rstrip('/')
     args.resources_directory = args.resources_directory.rstrip('/')
@@ -125,7 +130,7 @@ def timed_message(message):
 
 
 def human_time(seconds):
-    days = seconds // 86400
+    days = round(seconds // 86400)
     if days > 0:
         return strftime(f"{days}d%Hh%Mm%Ss", gmtime(seconds))
     return strftime("%Hh%Mm%Ss", gmtime(seconds))
@@ -559,11 +564,11 @@ def make_diamond_database(fasta, dmnd):
     run_command(f'diamond makedb --in {fasta} -d {dmnd}')
 
 
-def block_size_and_index_chunks(argsb, argsc):
+def block_size_and_index_chunks(argsb, argsc, memory):
     if argsb:
         b = argsb
     else:
-        b = virtual_memory().available / (1024.0 ** 3) / 20  # b = memory in Gb / 20
+        b = memory / (1024.0 ** 3) / 20  # b = memory in Gb / 20
     if argsc:
         return b, argsc
     if b > 3:
@@ -576,10 +581,11 @@ def block_size_and_index_chunks(argsb, argsc):
 
 
 def run_diamond(query, aligned, unaligned, database, threads=12, max_target_seqs=50, b=1, c=4, e_value=0.01,
-                bit_score=None, pident=None):
+                bit_score=None, pident=None, mode='fast'):
     command = (
         f"diamond blastp --query {query} --out {aligned} --un {unaligned} --db {database} --outfmt 6 --unal 1 "
-        f"--threads {threads} --max-target-seqs {max_target_seqs} -b {b} -c {c} --evalue {e_value} --very-sensitive")
+        f"--threads {threads} --max-target-seqs {max_target_seqs} -b {b} -c {c} --evalue {e_value} "
+        f"--{mode.replace('_', '-')}")
     if bit_score:
         command += f' --min-score {bit_score}'
     if pident:
@@ -588,6 +594,12 @@ def run_diamond(query, aligned, unaligned, database, threads=12, max_target_seqs
 
 
 def get_proteome_for_taxid_slow(taxid, max_tries=3):
+    """
+    Get proteome for taxid the "proper" way. It is very slow, though, so not used.
+    :param taxid:
+    :param max_tries:
+    :return:
+    """
     tries = 0
     res = requests.get(f'https://rest.uniprot.org/uniprotkb/search?format=fasta&query=%28taxonomy_id%3A{taxid}%29')
     result = res.content.decode('utf8')
@@ -608,8 +620,7 @@ def get_proteome_for_taxid(taxid, max_tries=3):
     done = False
     while tries < max_tries and not done:
         try:
-            res = requests.get(
-                f'https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=%28taxonomy_id%3A{taxid}%29')
+            res = requests.get(f'https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=taxonomy_id:{taxid}')
             done = True
         except:
             print(f'Failed! {max_tries - tries} tries remaining.')
@@ -1226,15 +1237,16 @@ def upimapi():
                 build_reference_database(
                     args.database, args.resources_directory, taxids=args.taxids, max_tries=args.max_tries,
                     mirror=args.mirror)
-                if not database.endswith(".dmnd"):
-                    if not os.path.isfile(f"{'.'.join(database.split('.')[:-1])}.dmnd"):
-                        make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
-                    database = f"{'.'.join(database.split('.')[:-1])}.dmnd"
-        (b, c) = block_size_and_index_chunks(argsb=args.block_size, argsc=args.index_chunks)
+        if not database.endswith(".dmnd"):
+            if not os.path.isfile(f"{'.'.join(database.split('.')[:-1])}.dmnd"):
+                make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
+            database = f"{'.'.join(database.split('.')[:-1])}.dmnd"
+        (b, c) = block_size_and_index_chunks(
+            argsb=args.block_size, argsc=args.index_chunks, memory=args.max_memory)
         run_diamond(
             args.input, f'{args.output}/aligned.blast', f'{args.output}/unaligned.blast', database,
             threads=args.threads, max_target_seqs=args.max_target_seqs, b=b, c=c, e_value=args.evalue,
-            bit_score=args.bitscore, pident=args.pident)
+            bit_score=args.bitscore, pident=args.pident, mode=args.diamond_mode)
         if args.max_target_seqs > 1:
             blast_consensus(f'{args.output}/aligned.blast').to_csv(
                 f'{args.output}/consensus.blast', sep='\t', index=False)
