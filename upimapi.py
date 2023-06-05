@@ -27,7 +27,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.11.0'
+__version__ = '1.11.1'
 
 
 def get_arguments():
@@ -110,7 +110,8 @@ def get_arguments():
         "-c", "--index-chunks", type=int,
         help="Number of chunks for processing the seed index [dependant on block size]")
     diamond_args.add_argument(
-        "--max-memory", type=float, default=virtual_memory().available, help="Maximum memory to use [all available]")
+        "--max-memory", type=float, default=virtual_memory().available / (1024.0 ** 3),
+        help="Maximum memory to use (in Gb) [all available]")
     diamond_args.add_argument(
         "--taxids", default=None, help="Tax IDs to obtain protein sequences of for building a reference database.")
     diamond_args.add_argument(
@@ -568,7 +569,7 @@ def block_size_and_index_chunks(argsb, argsc, memory):
     if argsb:
         b = argsb
     else:
-        b = memory / (1024.0 ** 3) / 20  # b = memory in Gb / 20
+        b = memory / 20  # b = memory in Gb / 20
     if argsc:
         return b, argsc
     if b > 3:
