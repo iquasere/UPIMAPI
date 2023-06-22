@@ -27,7 +27,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.11.1'
+__version__ = '1.11.2'
 
 
 def get_arguments():
@@ -469,12 +469,13 @@ def uniprot_information_workflow(
         if len(taxids_cols) > 0:
             tax_df = pd.concat([tax_df, make_taxonomic_lineage_df(
                 uniprotinfo['Taxonomic lineage (Ids)'], prefix='Taxonomic lineage IDs')], axis=1)
+        # remove taxonomic lineage and taxonomic lineage (ids) columns if they were not supposed to be added
         for col in all_tax_cols:
             if col not in tax_df.columns:
-                tax_df[col] = np.nan
+                del tax_df[col]
         uniprotinfo = pd.concat([uniprotinfo, tax_df[all_tax_cols]], axis=1).rename(columns={
             'Organism': 'Taxonomic lineage (SPECIES)'})
-        cols = list(set(result.columns.tolist() + uniprotinfo.columns.tolist()))
+        cols = uniprotinfo.columns.tolist() + [col for col in result.columns.tolist() if col not in uniprotinfo.columns]
         if 'Taxonomic lineage (SPECIES)' in cols:
             cols.remove('Taxonomic lineage (SPECIES)')
             cols.append('Taxonomic lineage (SPECIES)')
