@@ -124,60 +124,56 @@ Information obtained with UPIMAPI can come in two forms:
 ## Additional parameters
 
 ```
-optional arguments:
   -h, --help            show this help message and exit
   -i INPUT, --input INPUT
-                        Input filename - can be: 1. a file containing a list
-                        of IDs (one per line) 2. a BLAST TSV result file
-                        (requires to be specified with the --blast parameter
-                        3. a protein FASTA file to be annotated (requires the
-                        --use-diamond and -db parameters) 4. nothing! If so,
-                        will read input from command line, and parse as CSV
+                        Input filename - can be: 1. a file containing a list of IDs (comma-separated values, no spaces) 2. a BLAST TSV result file (requires to be specified with the
+                        --blast parameter 3. a protein FASTA file to be annotated (requires the -db parameter) 4. nothing! If so, will read input from command line, and parse as CSV
                         (id1,id2,...)
   -o OUTPUT, --output OUTPUT
                         Folder to store outputs
   -ot OUTPUT_TABLE, --output-table OUTPUT_TABLE
-                        Filename of table output, where UniProt info is
-                        stored. If set, will override 'output' parameter just
-                        for that specific file
+                        Filename of table output, where UniProt info is stored. If set, will override 'output' parameter just for that specific file
+  -rd RESOURCES_DIRECTORY, --resources-directory RESOURCES_DIRECTORY
+                        Directory to store resources of UPIMAPI [~/upimapi_resources]
   -cols COLUMNS, --columns COLUMNS
-                        List of UniProt columns to obtain information from
-                        (separated by &)
-  --blast               If input file is in BLAST TSV format (will consider
-                        one ID per line if not set)
-  --full-id FULL_ID     If IDs in database are in 'full' format: tr|XXX|XXX
-  --fasta               Output will be generated in FASTA format
+                        List of UniProt columns to obtain information from (separated by &)
+  --blast               If input file is in BLAST TSV format (will consider one ID per line if not set) [false]
+  --full-id FULL_ID     If IDs in database are in 'full' format: tr|XXX|XXX [auto]
+  --fasta               Output will be generated in FASTA format [false]
   --step STEP           How many IDs to submit per request to the API [1000]
   --max-tries MAX_TRIES
-                        How many times to try obtaining information from
-                        UniProt before giving up
-  --sleep SLEEP         Time between requests (in seconds) [10]
+                        How many times to try obtaining information from UniProt before giving up [3]
+  --sleep SLEEP         Time between requests (in seconds) [3]
+  --no-annotation       Do not perform annotation - input must be in one of BLAST result or TXT IDs file or STDIN [false]
+  --local-id-mapping    Perform local ID mapping of SwissProt IDs. Advisable if many IDs of SwissProt are present [false]
+  --skip-id-mapping     If true, UPIMAPI will not perform ID mapping [false]
+  --skip-id-checking    If true, UPIMAPI will not check if IDs are valid before mapping [false]
+  --skip-db-check       So UPIMAPI doesn't check for (FASTA) database existence [false]
+  --mirror {expasy,uniprot,ebi}
+                        From where to download UniProt database [expasy]
   -v, --version         show program's version number and exit
 
 DIAMOND arguments:
-  --use-diamond         Use DIAMOND to annotate sequences before mapping IDs.
-                        Requires protein FASTA files as input for "-db" and
-                        "-i" parameters
   -db DATABASE, --database DATABASE
-                        Reference database for annotation with DIAMOND.
-                        NOTICE: if database's IDs are in 'full' format
-                        (tr|XXX|XXX), specify with ""--full-id" parameter.
+                        How the reference database is inputted to UPIMAPI. 1. uniprot - UPIMAPI will download the entire UniProt and use it as reference 2. swissprot - UPIMAPI will
+                        download SwissProt and use it as reference 3. taxids - Reference proteomes will be downloaded for the taxa specified with the --taxids, and those will be used as
+                        reference 4. a custom database - Input will be considered as the database, and will be used as reference
   -t THREADS, --threads THREADS
-                        Number of threads to use in annotation steps [total -
-                        2]
+                        Number of threads to use in annotation steps [all available]
   --evalue EVALUE       Maximum e-value to report annotations for [1e-3]
   --pident PIDENT       Minimum pident to report annotations for.
-  --bitscore BITSCORE   Minimum bit score to report annotations for (overrides
-                        e-value).
+  --bitscore BITSCORE   Minimum bit score to report annotations for (overrides e-value).
   -mts MAX_TARGET_SEQS, --max-target-seqs MAX_TARGET_SEQS
-                        Number of annotations to output per sequence inputed
-                        [1]
+                        Number of annotations to output per sequence inputed [1]
   -b BLOCK_SIZE, --block-size BLOCK_SIZE
-                        Billions of sequence letters to be processed at a time
-                        (default: auto determine best value)
+                        Billions of sequence letters to be processed at a time [memory / 20]
   -c INDEX_CHUNKS, --index-chunks INDEX_CHUNKS
-                        Number of chunks for processing the seed index
-                        (default: auto determine best value)
+                        Number of chunks for processing the seed index [dependant on block size]
+  --max-memory MAX_MEMORY
+                        Maximum memory to use (in Gb) [all available]
+  --taxids TAXIDS       Tax IDs to obtain protein sequences of for building a reference database.
+  --diamond-mode {fast,mid_sensitive,sensitive,more_sensitive,very_sensitive,ultra_sensitive}
+                        Mode to run DIAMOND with [fast]
 ```
 
 ## Referencing UPIMAPI
