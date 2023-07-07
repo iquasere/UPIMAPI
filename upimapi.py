@@ -1354,6 +1354,7 @@ def upimapi():
 
     if args.from_db != 'UniProtKB AC/ID' or args.to_db != 'UniProtKB':
         basic_idmapping_multiprocess(ids, table_output, args.from_db, args.to_db, threads=args.threads)
+        return
 
     if not args.skip_id_checking:
         ids, not_valid = get_valid_entries_multiprocess(ids, threads=args.threads)

@@ -27,7 +27,7 @@ requirements:
     - tqdm
     - requests
     - biopython
-    - yaml
+    - pyyaml
 
 test:
   commands:
