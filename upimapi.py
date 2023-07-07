@@ -276,9 +276,8 @@ def submit_id_mapping(from_db, to_db, ids):
     :param ids:
     :return:
     """
-    from_db = from_fields[from_db]
-    to_db = to_fields[to_db]
-    r = requests.post(f"{api_info['servers'][0]['url']}/idmapping/run", data={"from": from_db, "to": to_db, "ids": ids})
+    data = {"from": from_fields[from_db], "to": to_fields[to_db], "ids": ids}
+    r = requests.post(f"{api_info['servers'][0]['url']}/idmapping/run", data=data)
     r.raise_for_status()
     return r.json()["jobId"]
 
@@ -305,7 +304,6 @@ def basic_idmapping(ids, from_db, to_db):
     job_id = submit_id_mapping(from_db, to_db, ids)
     r = get_id_mapping_results(job_id)
     result = pd.DataFrame().from_dict(r.json()["results"])
-    i = 0
     while r.links.get("next", {}).get("url"):
         r = get_url(r.links["next"]["url"])
         result = pd.concat([result, pd.DataFrame().from_dict(r.json()["results"])])
@@ -320,7 +318,7 @@ def basic_idmapping_batch(ids, from_db, to_db, step=1000):
     :param ids:
     :return:
     """
-    result = pd.Dataframe()
+    result = pd.DataFrame()
     for i in tqdm(range(0, len(ids), step), desc='Getting valid UniProt IDs', ascii=' >='):
         done = False
         while not done:
@@ -342,7 +340,7 @@ def basic_idmapping_multiprocess(ids, output, from_db, to_db, step=1000, threads
                 ids_group, from_db, to_db, step) for ids_group in ids_groups])
     for res in mapping_results:
         result = pd.concat([result, res])
-    timed_message(f'{result.unique().sum()} IDs were successfully mapped.')
+    timed_message(f'{result["from"].unique().size} IDs were successfully mapped.')
     result.to_csv(output, sep='\t', index=False)
     timed_message(f'Results saved at {output}.')
 
