@@ -14,6 +14,7 @@ import sys
 from time import strftime, gmtime, time, sleep
 from subprocess import run, Popen, PIPE, check_output
 import requests
+import yaml
 from psutil import virtual_memory
 from pathlib import Path
 from multiprocessing import cpu_count, Pool, Manager
@@ -27,7 +28,47 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.11.2'
+__version__ = '1.12.0'
+
+
+def load_api_info():
+    return yaml.safe_load(requests.get('https://rest.uniprot.org/docs/uniprot-openapi3.yaml').text)
+
+
+def get_url(url, **kwargs):
+    response = requests.get(url, **kwargs)
+    if not response.ok:
+        response.raise_for_status()
+        sys.exit(response.txt)
+    return response
+
+
+def get_uniprot_columns():
+    res = get_url('https://rest.uniprot.org/configure/uniprotkb/result-fields')
+    obj = json.loads(res.text)
+    result = {}
+    for i in range(len(obj)):
+        for col in obj[i]['fields']:
+            result[col['label']] = col['name']
+    return result
+
+
+def get_id_mapping_fields():
+    res = get_url('https://rest.uniprot.org/configure/idmapping/fields')
+    obj = json.loads(res.text)
+    froms, tos = {}, {}
+    for group in range(len(obj['groups'])):
+        for item in obj['groups'][group]['items']:
+            if item['from']:
+                froms[item['displayName']] = item['name']
+            if item['to']:
+                tos[item['displayName']] = item['name']
+    return froms, tos
+
+
+api_info = load_api_info()
+columns_dict = get_uniprot_columns()
+from_fields, to_fields = get_id_mapping_fields()
 
 
 def get_arguments():
@@ -49,6 +90,13 @@ def get_arguments():
         help="Directory to store resources of UPIMAPI [~/upimapi_resources]")
     parser.add_argument(
         "-cols", "--columns", default=None, help="List of UniProt columns to obtain information from (separated by &)")
+    parser.add_argument(
+        "--from", default="UniProtKB AC/ID", choices=from_fields.keys(),
+        help="Which database are the IDs from. If from UniProt, default is fine [UniProtKB AC/ID]")
+    parser.add_argument(
+        "--to", default="UniProtKB", choices=to_fields.keys(),
+        help="To which database the IDs should be mapped. If only interested in columns information "
+             "(which include cross-references), default is fine [UniProtKB]")
     parser.add_argument(
         "--blast", action="store_true", default=False,
         help="If input file is in BLAST TSV format (will consider one ID per line if not set) [false]")
@@ -160,24 +208,21 @@ def parse_blast(blast):
     return result
 
 
-def string4mapping(columns_dict, columns=None):
-    # all columns to lower case
-    columns_dict = {k.lower(): v for k, v in columns_dict.items()}
+def string4mapping(columns=None):
     if columns is None or columns == []:    # if no columns are inputted, UPIMAPI uses defaults
         valid_columns = [
-            'entry', 'entry name', 'gene names', 'protein names', 'ec number', 'function [cc]', 'pathway', 'keywords',
-            'protein existence', 'gene ontology (go)', 'protein families', 'taxonomic lineage',
-            'taxonomic lineage (ids)', 'organism', 'organism (id)', 'biocyc', 'brenda', 'cdd', 'eggnog', 'ensembl',
-            'interpro', 'kegg', 'pfam', 'reactome', 'refseq', 'unipathway']
+            'Entry', 'Entry Name', 'Organism', 'Organism (ID)', 'Taxonomic lineage', 'Taxonomic lineage (Ids)',
+            'Gene Names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
+            'Protein existence', 'Gene Ontology (GO)', 'Protein families', 'BRENDA', 'BioCyc', 'CDD', 'eggNOG',
+            'Ensembl', 'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway']
     else:                                   # check what columns are valid
-        columns = [col.lower() for col in columns]
         valid_columns = [column for column in columns if column in columns_dict.keys()]
         invalid_columns = [column for column in columns if column not in columns_dict.keys()]
         for col in invalid_columns:
-            print(f'WARNING: "{col}" is not a valid column name (lower case is not the issue). '
+            print(f'WARNING: "{col}" is not a valid column name. '
                   f'Check https://www.uniprot.org/help/return_fields (Label* column) for valid column names '
                   f'or raise an issue at https://github.com/iquasere/UPIMAPI/issues')
-    for col in ['entry', 'entry name']:     # UPIMAPI requires these two columns to be present
+    for col in ['Entry', 'Entry Name']:     # UPIMAPI requires these two columns to be present
         if col not in valid_columns:
             valid_columns.insert(0, col)
     return ','.join([columns_dict[column] for column in valid_columns])
@@ -200,15 +245,7 @@ def parallelize_on_rows(data, func, num_of_processes=8, **kwargs):
     return parallelize(data, partial(run_on_subset, func, kwargs), num_of_processes)
 
 
-def get_url(url, **kwargs):
-    response = requests.get(url, **kwargs)
-    if not response.ok:
-        response.raise_for_status()
-        sys.exit(response.txt)
-    return response
-
-
-def uniprot_request(ids, api_info, columns_dict=None, columns=None, output_format='tsv'):
+def uniprot_request(ids, columns=None, output_format='tsv'):
     """
     Input:
         ids: list of UniProt IDs to query
@@ -220,19 +257,33 @@ def uniprot_request(ids, api_info, columns_dict=None, columns=None, output_forma
     Output:
         Returns the content of the response from UniProt
     """
-    fields = f'&fields={string4mapping(columns_dict, columns=columns)}'
+    fields = f'&fields={string4mapping(columns=columns)}'
     WEBSITE_API = api_info['servers'][0]['url']
     resp = get_url(f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}{fields}&format={output_format}")
     return resp.text
 
 
-def submit_id_mapping(fromDB, toDB, ids, api_info):
-    r = requests.post(f"{api_info['servers'][0]['url']}/idmapping/run", data={"from": fromDB, "to": toDB, "ids": ids})
+def split(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n))
+
+
+def submit_id_mapping(from_db, to_db, ids):
+    """
+    Get info from one database to the other
+    :param from_db: Available options at https://rest.uniprot.org/configure/idmapping/fields
+    :param to_db: Available options at https://rest.uniprot.org/configure/idmapping/fields
+    :param ids:
+    :return:
+    """
+    from_db = from_db.replace('/', '-').replace(' ', '_')
+    to_db = to_db.replace('/', '-').replace(' ', '_')
+    r = requests.post(f"{api_info['servers'][0]['url']}/idmapping/run", data={"from": from_db, "to": to_db, "ids": ids})
     r.raise_for_status()
     return r.json()["jobId"]
 
 
-def get_id_mapping_results(job_id, api_info):
+def get_id_mapping_results(job_id):
     while True:
         r = get_url(f"{api_info['servers'][0]['url']}/idmapping/status/{job_id}")
         job = r.json()
@@ -243,51 +294,62 @@ def get_id_mapping_results(job_id, api_info):
             return r
 
 
-def split(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n))
+def basic_idmapping(ids, from_db, to_db):
+    """
+    Get info from one database to the other
+    :param ids:
+    :param from_db: Available options at https://rest.uniprot.org/configure/idmapping/fields
+    :param to_db: Available options at https://rest.uniprot.org/configure/idmapping/fields
+    :return:
+    """
+    job_id = submit_id_mapping(from_db, to_db, ids)
+    r = get_id_mapping_results(job_id)
+    result = pd.DataFrame().from_dict(r.json()["results"])
+    i = 0
+    while r.links.get("next", {}).get("url"):
+        r = get_url(r.links["next"]["url"])
+        result = pd.concat([result, pd.DataFrame().from_dict(r.json()["results"])])
+    return result
 
 
-def get_valid_entries_multiprocess(ids, api_info, step=1000, threads=15):
-    valid_entries = []
-    ids_groups = split(list(set(ids)), threads)
-    with Manager() as m:
-        with m.Pool() as p:
-            result = p.starmap(get_valid_entries_batch, [(ids_group, api_info, step) for ids_group in ids_groups])
-    for res in result:
-        valid_entries += res
-    not_valid = set(ids) - set(valid_entries)
-    # take, from the valid IDs, the part after the dot, as this invalidates them
-    valid_entries = [entry.split('.')[0] for entry in valid_entries]
-    timed_message(f'{len(valid_entries)} UniProt IDs identified as valid.')
-    return valid_entries, not_valid
-
-
-def get_valid_entries_batch(ids, api_info, step=1000):
+def basic_idmapping_batch(ids, from_db, to_db, step=1000):
     """
     Allows to retrieve millions of IDs at once, there seems to be some limit causing UniProt's API to fail with
     "Request Entity Too Large for url".
     :param step:
     :param ids:
-    :param api_info:
     :return:
     """
-    valid_entries = []
-    for i in tqdm(range(0, len(ids), step), desc='Getting valid UniProt IDs'):
+    result = pd.Dataframe()
+    for i in tqdm(range(0, len(ids), step), desc='Getting valid UniProt IDs', ascii=' >='):
         done = False
         while not done:
             j = min(i + step, len(ids))
             try:
-                valid_entries += get_valid_entries(ids[i:j], api_info)
+                result = pd.concat([result, basic_idmapping(ids[i:j], from_db, to_db)])
                 done = True
             except:
                 sleep(3)
-    return valid_entries
+    return result
 
 
-def get_valid_entries(ids, api_info):
-    job_id = submit_id_mapping("UniProtKB_AC-ID", "UniProtKB", ids, api_info)
-    r = get_id_mapping_results(job_id, api_info)
+def basic_idmapping_multiprocess(ids, output, from_db, to_db, step=1000, threads=15):
+    result = pd.DataFrame()
+    ids_groups = split(ids, threads)
+    with Manager() as m:
+        with m.Pool() as p:
+            mapping_results = p.starmap(basic_idmapping_batch, [(
+                ids_group, from_db, to_db, step) for ids_group in ids_groups])
+    for res in mapping_results:
+        result = pd.concat([result, res])
+    timed_message(f'{result.unique().sum()} IDs were successfully mapped.')
+    result.to_csv(output, sep='\t', index=False)
+    timed_message(f'Results saved at {output}.')
+
+
+def get_valid_entries(ids):
+    job_id = submit_id_mapping("UniProtKB_AC-ID", "UniProtKB", ids)
+    r = get_id_mapping_results(job_id)
     valid_entries = [res["from"] for res in r.json()["results"] if '_' not in res["from"]]
     while r.links.get("next", {}).get("url"):
         r = get_url(r.links["next"]["url"])
@@ -295,7 +357,43 @@ def get_valid_entries(ids, api_info):
     return valid_entries
 
 
-def get_uniprot_information(ids, api_info, columns_dict, step=1000, sleep_time=30, columns=None, max_tries=3):
+def get_valid_entries_batch(ids, step=1000):
+    """
+    Allows to retrieve millions of IDs at once, there seems to be some limit causing UniProt's API to fail with
+    "Request Entity Too Large for url".
+    :param step:
+    :param ids:
+    :return:
+    """
+    valid_entries = []
+    for i in tqdm(range(0, len(ids), step), desc='Getting valid UniProt IDs', ascii=' >='):
+        done = False
+        while not done:
+            j = min(i + step, len(ids))
+            try:
+                valid_entries += get_valid_entries(ids[i:j])
+                done = True
+            except:
+                sleep(3)
+    return valid_entries
+
+
+def get_valid_entries_multiprocess(ids, step=1000, threads=15):
+    valid_entries = []
+    ids_groups = split(ids, threads)
+    with Manager() as m:
+        with m.Pool() as p:
+            result = p.starmap(get_valid_entries_batch, [(ids_group, step) for ids_group in ids_groups])
+    for res in result:
+        valid_entries += res
+    not_valid = [ide for ide in ids if ide not in valid_entries]
+    # take, from the valid IDs, the part after the dot, as this invalidates them
+    valid_entries = [entry.split('.')[0] for entry in valid_entries]
+    timed_message(f'{len(valid_entries)} UniProt IDs identified as valid.')
+    return valid_entries, not_valid
+
+
+def get_uniprot_information(ids, step=1000, sleep_time=30, columns=None, max_tries=3):
     """
     Input:
         ids: list of UniProt IDs to query
@@ -312,7 +410,7 @@ def get_uniprot_information(ids, api_info, columns_dict, step=1000, sleep_time=3
         j = min(i + step, len(ids))
         while not done and tries < max_tries:
             try:
-                data = uniprot_request(ids[i:j], api_info, columns_dict=columns_dict, columns=columns)
+                data = uniprot_request(ids[i:j], columns=columns)
                 if len(data) > 0:
                     uniprotinfo = pd.read_csv(StringIO(data), sep='\t')
                     result = pd.concat([result, uniprotinfo[uniprotinfo.columns.tolist()]])
@@ -325,7 +423,7 @@ def get_uniprot_information(ids, api_info, columns_dict, step=1000, sleep_time=3
     return result
 
 
-def get_uniprot_fasta(ids, api_info, columns_dict, step=1000, sleep_time=30):
+def get_uniprot_fasta(ids, step=1000, sleep_time=30):
     """
     Input:
         ids: list of UniProt IDs to query
@@ -338,14 +436,14 @@ def get_uniprot_fasta(ids, api_info, columns_dict, step=1000, sleep_time=30):
     result = ''
     for i in tqdm(range(0, len(ids), step), desc=f"Building FASTA from {len(ids)} IDs."):
         j = min(i + step, len(ids))
-        data = uniprot_request(ids[i:j], api_info, columns_dict=columns_dict, output_format='fasta')
+        data = uniprot_request(ids[i:j], output_format='fasta')
         if len(data) > 0:
             result += data
         sleep(sleep_time)
     return result
 
 
-def uniprot_fasta_workflow(all_ids, output, api_info, columns_dict, max_iter=5, step=1000, sleep_time=10):
+def uniprot_fasta_workflow(all_ids, output, max_iter=5, step=1000, sleep_time=10):
     if os.path.isfile(output):
         print(f'{output} was found. Will perform mapping for the remaining IDs.')
         ids_done = get_fasta_ids(output)
@@ -360,7 +458,7 @@ def uniprot_fasta_workflow(all_ids, output, api_info, columns_dict, max_iter=5, 
         ids_missing = list(set([ide for ide in tqdm(all_ids, desc='Checking which IDs are missing information.')
                                 if ide not in ids_done]))
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
-        uniprotinfo = get_uniprot_fasta(ids_missing, api_info, columns_dict, step=step, sleep_time=sleep_time)
+        uniprotinfo = get_uniprot_fasta(ids_missing, step=step, sleep_time=sleep_time)
         with open(output, 'a') as file:
             file.write(uniprotinfo)
         ids_done = [ide.split('|')[1] for ide in get_fasta_ids(output)]
@@ -430,8 +528,7 @@ def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
     return result
 
 
-def uniprot_information_workflow(
-        ids, output, api_info, columns_dict, max_iter=5, columns=None, step=1000, sleep_time=10):
+def uniprot_information_workflow(ids, output, max_iter=5, columns=None, step=1000, sleep_time=10):
     ids_done, ids_missing, result = check_ids_already_done(output, ids)
     add_tax_cols = columns is None
     tries, last_ids_missing = 0, None
@@ -448,7 +545,7 @@ def uniprot_information_workflow(
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
         info = get_uniprot_information(
-            ids_missing, api_info, columns_dict, step=step, columns=columns, max_tries=max_iter, sleep_time=sleep_time)
+            ids_missing, step=step, columns=columns, max_tries=max_iter, sleep_time=sleep_time)
         info.reset_index(inplace=True)
         del info['index']
         if len(info) > 0:
@@ -619,16 +716,14 @@ def get_proteome_for_taxid_slow(taxid, max_tries=3):
 
 def get_proteome_for_taxid(taxid, max_tries=3):
     tries = 0
-    done = False
-    while tries < max_tries and not done:
+    url = f'https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=taxonomy_id:{taxid}'
+    while tries < max_tries:
         try:
-            res = requests.get(f'https://rest.uniprot.org/uniprotkb/stream?format=fasta&query=taxonomy_id:{taxid}')
-            done = True
+            return requests.get(url).content.decode('utf8')
         except:
             print(f'Failed! {max_tries - tries} tries remaining.')
             tries += 1
             sleep(10)
-    return res.content.decode('utf8')
 
 
 def local_uniprot_is_outdated(local_reldate_file):
@@ -1203,21 +1298,6 @@ def blast_consensus(alignment_file):
     return blast.set_index(['qseqid', 'sseqid']).loc[res.set_index(['qseqid', 'sseqid']).index].reset_index()
 
 
-def load_api_info():
-    #return yaml.safe_load(requests.get('https://rest.uniprot.org/docs/uniprot-openapi3.yaml').text)
-    return {'servers': [{'url': 'https://rest.uniprot.org'}]} #api_info['servers'][0]['url']
-
-
-def get_uniprot_columns():
-    res = get_url('https://rest.uniprot.org/configure/uniprotkb/result-fields')
-    obj = json.loads(res.text)
-    result = {}
-    for i in range(len(obj)):
-        for col in obj[i]['fields']:
-            result[col['label']] = col['name']
-    return result
-
-
 def upimapi():
     args = get_arguments()
     Path(args.output).mkdir(parents=True, exist_ok=True)
@@ -1240,9 +1320,10 @@ def upimapi():
                     args.database, args.resources_directory, taxids=args.taxids, max_tries=args.max_tries,
                     mirror=args.mirror)
         if not database.endswith(".dmnd"):
-            if not os.path.isfile(f"{'.'.join(database.split('.')[:-1])}.dmnd"):
-                make_diamond_database(database, f"{'.'.join(database.split('.')[:-1])}.dmnd")
-            database = f"{'.'.join(database.split('.')[:-1])}.dmnd"
+            diamond_formatted = f"{'.'.join(database.split('.')[:-1])}.dmnd"
+            if not os.path.isfile(diamond_formatted):
+                make_diamond_database(database, diamond_formatted)
+            database = diamond_formatted
         (b, c) = block_size_and_index_chunks(
             argsb=args.block_size, argsc=args.index_chunks, memory=args.max_memory)
         run_diamond(
@@ -1259,17 +1340,23 @@ def upimapi():
         exit('Not performing ID mapping as specified.')
 
     timed_message('ID mapping has begun.')
-
-    api_info = load_api_info()
-    columns_dict = get_uniprot_columns()
-
     args_input, input_type = get_input_type(args.input, blast=args.blast)
 
     # Get the IDs
     ids, full_id, sp_ids = get_ids(args_input, input_type=input_type, full_id=args.full_id)
 
+    if args.output_table:
+        table_output = args.output_table
+        print(f'Overrided table output to {table_output}')
+        Path('/'.join(args.output_table.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
+    else:
+        table_output = f'{args.output}/uniprotinfo.tsv'
+
+    if args.from_db != 'UniProtKB AC/ID' or args.to_db != 'UniProtKB':
+        basic_idmapping_multiprocess(ids, table_output, args.from_db, args.to_db, threads=args.threads)
+
     if not args.skip_id_checking:
-        ids, not_valid = get_valid_entries_multiprocess(ids, api_info, threads=args.threads)
+        ids, not_valid = get_valid_entries_multiprocess(ids, threads=args.threads)
         # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
         with open(f'{args.output}/valid_ids.txt', 'w') as f:
             f.write('\n'.join(ids))
@@ -1278,13 +1365,6 @@ def upimapi():
 
     # Get UniProt information
     if not args.fasta:
-        if args.output_table:
-            table_output = args.output_table
-            print(f'Overrided table output to {table_output}')
-            Path('/'.join(args.output_table.split('/')[:-1])).mkdir(parents=True, exist_ok=True)
-        else:
-            table_output = f'{args.output}/uniprotinfo.tsv'
-
         # ID mapping through local information
         if args.local_id_mapping:
             ids = set(ids) - set(local_id_mapping(
@@ -1293,7 +1373,7 @@ def upimapi():
 
         # ID mapping through API
         uniprot_information_workflow(
-            ids, table_output, api_info, columns_dict, columns=args.columns, step=args.step, max_iter=args.max_tries,
+            ids, table_output, columns=args.columns, step=args.step, max_iter=args.max_tries,
             sleep_time=args.sleep)
         result = pd.read_csv(table_output, sep='\t', low_memory=False)
 
@@ -1307,7 +1387,7 @@ def upimapi():
             f'{args.output}/UPIMAPI_results.tsv', index=False, sep='\t')
     else:
         uniprot_fasta_workflow(
-            ids, f'{args.output}/uniprotinfo.fasta', api_info, columns_dict, step=args.step, sleep_time=args.sleep)
+            ids, f'{args.output}/uniprotinfo.fasta', step=args.step, sleep_time=args.sleep)
 
 
 if __name__ == '__main__':
