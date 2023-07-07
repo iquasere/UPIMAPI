@@ -39,7 +39,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: IDs inputted through TXT file (comma-separated)
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation -cols 'Entry&KEGG&Interacts with'"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -cols 'Entry&KEGG&Interacts with'"
 
   txt-file-newline-separated:
     runs-on: ubuntu-latest
@@ -53,7 +53,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: Full IDs inputted through TXT file (newline-separated)
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/full_ids.txt -rd resources_directory --no-annotation"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/full_ids.txt"
 
   blast-file:
     runs-on: ubuntu-latest
@@ -67,7 +67,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: IDs inputted through BLAST file
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.blast -rd resources_directory --no-annotation --blast"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.blast -rd resources_directory --blast"
 
   get-fasta-sequences:
     runs-on: ubuntu-latest
@@ -81,7 +81,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: Obtain FASTA sequences
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation --fasta"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --fasta"
 
   basic-id-mapping:
     runs-on: ubuntu-latest
@@ -94,7 +94,7 @@ jobs:
           path: /tmp
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
-      - name: Obtain FASTA sequences
+      - name: Perform basic ID mapping
         run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --from 'UniProtKB AC/ID' --to 'EMBL/GenBank/DDBJ CDS'"
 
   full-workflow:

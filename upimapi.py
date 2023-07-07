@@ -91,10 +91,10 @@ def get_arguments():
     parser.add_argument(
         "-cols", "--columns", default=None, help="List of UniProt columns to obtain information from (separated by &)")
     parser.add_argument(
-        "--from", default="UniProtKB AC/ID", choices=from_fields.keys(),
+        "--from-db", default="UniProtKB AC/ID", choices=from_fields.keys(),
         help="Which database are the IDs from. If from UniProt, default is fine [UniProtKB AC/ID]")
     parser.add_argument(
-        "--to", default="UniProtKB", choices=to_fields.keys(),
+        "--to-db", default="UniProtKB", choices=to_fields.keys(),
         help="To which database the IDs should be mapped. If only interested in columns information "
              "(which include cross-references), default is fine [UniProtKB]")
     parser.add_argument(
@@ -346,7 +346,7 @@ def basic_idmapping_multiprocess(ids, output, from_db, to_db, step=1000, threads
 
 
 def get_valid_entries(ids):
-    job_id = submit_id_mapping("UniProtKB_AC-ID", "UniProtKB", ids)
+    job_id = submit_id_mapping("UniProtKB AC/ID", "UniProtKB", ids)
     r = get_id_mapping_results(job_id)
     valid_entries = [res["from"] for res in r.json()["results"] if '_' not in res["from"]]
     while r.links.get("next", {}).get("url"):
@@ -1355,8 +1355,8 @@ def upimapi():
         return
 
     if not args.skip_id_checking:
+        # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those IDs.
         ids, not_valid = get_valid_entries_multiprocess(ids, threads=args.threads)
-        # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those
         with open(f'{args.output}/valid_ids.txt', 'w') as f:
             f.write('\n'.join(ids))
         with open(f'{args.output}/not_valid_ids.txt', 'w') as f:
@@ -1364,7 +1364,7 @@ def upimapi():
 
     # Get UniProt information
     if not args.fasta:
-        # ID mapping through local information
+        # ID mapping through local SwissProt information
         if args.local_id_mapping:
             ids = set(ids) - set(local_id_mapping(
                 sp_ids, f'{args.resources_directory}/uniprot_sprot.dat', f'{args.resources_directory}/taxonomy.tsv',
