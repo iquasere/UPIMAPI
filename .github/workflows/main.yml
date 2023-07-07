@@ -83,6 +83,20 @@ jobs:
       - name: Obtain FASTA sequences
         run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --no-annotation --fasta"
 
+  basic-id-mapping:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: upimapi
+          path: /tmp
+      - name: Load Docker image
+        run: docker load --input /tmp/upimapi.tar
+      - name: Obtain FASTA sequences
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --from 'UniProtKB AC/ID' --to 'EMBL/GenBank/DDBJ CDS'"
+
   full-workflow:
     runs-on: ubuntu-latest
     needs: build

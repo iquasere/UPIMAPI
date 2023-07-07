@@ -276,8 +276,8 @@ def submit_id_mapping(from_db, to_db, ids):
     :param ids:
     :return:
     """
-    from_db = from_db.replace('/', '-').replace(' ', '_')
-    to_db = to_db.replace('/', '-').replace(' ', '_')
+    from_db = from_fields[from_db]
+    to_db = to_fields[to_db]
     r = requests.post(f"{api_info['servers'][0]['url']}/idmapping/run", data={"from": from_db, "to": to_db, "ids": ids})
     r.raise_for_status()
     return r.json()["jobId"]
