@@ -10,4 +10,4 @@ dependencies:
     - tqdm
     - requests
     - biopython
-    - yaml
+    - pyyaml
