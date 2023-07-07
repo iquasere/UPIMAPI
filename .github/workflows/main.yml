@@ -95,7 +95,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: Perform basic ID mapping
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --from 'UniProtKB AC/ID' --to 'EMBL/GenBank/DDBJ CDS'"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --from-db 'UniProtKB AC/ID' --to-db 'EMBL/GenBank/DDBJ CDS'"
 
   full-workflow:
     runs-on: ubuntu-latest

@@ -121,6 +121,19 @@ Information obtained with UPIMAPI can come in two forms:
 
 2. The **Fasta** workflow, specified with the ```--fasta``` argument, results in a FASTA file with the protein sequences correspondent to the inputted IDs
 
+## From/To ID mapping
+
+The ID mapping available at https://www.uniprot.org/id-mapping triggered when "From database" and "To database" are different to the default values - "UniProtKB AC/ID" and "UniProtKB" - is also implemented since UPIMAPI `1.12`.
+
+As an example, this command would convert IDs from UniProtKB to EMBL/Genbank/DDBJ CDS: 
+```
+upimapi -i ids.txt -o output_directory --from-db 'UniProtKB AC/ID' --to-db 'EMBL/GenBank/DDBJ CDS'
+```
+
+Possible values for parameters `--from-db` and `--to-db` can be consulted through the browser (https://www.uniprot.org/id-mapping), at https://rest.uniprot.org/configure/idmapping/fields, or by inputting a wrong value to one of those parameters. Possible options will show up.
+
+This new ID mapping can't be combined with the ID mapping that obtains columns of information from UniProt. UPIMAPI will exit after ID mapping.
+
 ## Additional parameters
 
 ```
