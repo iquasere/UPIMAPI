@@ -28,7 +28,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.12.0'
+__version__ = '1.12.1'
 
 
 def load_api_info():
@@ -210,21 +210,13 @@ def parse_blast(blast):
 
 def string4mapping(columns=None):
     if columns is None or columns == []:    # if no columns are inputted, UPIMAPI uses defaults
-        valid_columns = [
-            'Entry', 'Entry Name', 'Organism', 'Organism (ID)', 'Taxonomic lineage', 'Taxonomic lineage (Ids)',
-            'Gene Names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
-            'Protein existence', 'Gene Ontology (GO)', 'Protein families', 'BRENDA', 'BioCyc', 'CDD', 'eggNOG',
-            'Ensembl', 'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway']
-    else:                                   # check what columns are valid
-        valid_columns = [column for column in columns if column in columns_dict.keys()]
-        invalid_columns = [column for column in columns if column not in columns_dict.keys()]
-        for col in invalid_columns:
-            print(f'WARNING: "{col}" is not a valid column name. '
-                  f'Check https://www.uniprot.org/help/return_fields (Label* column) for valid column names '
-                  f'or raise an issue at https://github.com/iquasere/UPIMAPI/issues')
-    for col in ['Entry', 'Entry Name']:     # UPIMAPI requires these two columns to be present
-        if col not in valid_columns:
-            valid_columns.insert(0, col)
+        return None
+    valid_columns = [column for column in columns if column in columns_dict.keys()]
+    invalid_columns = [column for column in columns if column not in columns_dict.keys()]
+    for col in invalid_columns:
+        print(f'WARNING: "{col}" is not a valid column name. '
+              f'Check https://www.uniprot.org/help/return_fields (Label* column) for valid column names '
+              f'or raise an issue at https://github.com/iquasere/UPIMAPI/issues')
     return ','.join([columns_dict[column] for column in valid_columns])
 
 
@@ -465,7 +457,7 @@ def uniprot_fasta_workflow(all_ids, output, max_iter=5, step=1000, sleep_time=10
         print(f'Results for all IDs are available at {output}')
     else:
         ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
-        handler = open(ids_unmapped_output, 'a')
+        handler = open(ids_unmapped_output, 'w')
         handler.write('\n'.join(ids_missing))
         print(f'Maximum iterations were made. Results related to {str(len(ids_missing))} IDs were not obtained. '
               f'IDs with missing information are available at {ids_unmapped_output} and information obtained is '
@@ -477,8 +469,10 @@ def check_ids_already_done(output, ids):
         try:
             result = pd.read_csv(output, sep='\t', low_memory=False).drop_duplicates()
             print(f'{output} was found. Will perform mapping for the remaining IDs.')
-            ids_done = list(set(result['Entry'].tolist() + result['Entry Name'].tolist()))
-        except OSError:
+            if 'Entry Name' not in result.columns:
+                result['Entry Name'] = [np.nan] * len(result)
+            ids_done = result['Entry'].unique().tolist() + result['Entry Name'].unique().tolist()
+        except OSError:         # file doesn't exist or is empty
             print(f'{output} was found. However, it could not be parsed. Will restart mapping.')
             result = pd.DataFrame()
             ids_done = []
@@ -492,17 +486,39 @@ def check_ids_already_done(output, ids):
     return ids_done, ids_missing, result
 
 
-def extract_lineage_columns(columns):
-    tax_cols, taxids_cols = [], []
+def select_columns(columns):
+    """
+    :param columns: list - of columns to retrieve information from, including taxonomic columns
+    :return: new_cols: list - of columns to retrieve information from, without taxonomic columns added by UPIMAPI
+    :return: tax_cols: list - of taxonomic columns to retrieve information from
+    :return: taxids_cols: list - of taxid columns to retrieve information from
+    """
     if columns is not None:
         tax_cols = [col for col in columns if ('Taxonomic lineage (' in col and col != 'Taxonomic lineage (Ids)')]
         taxids_cols = [col for col in columns if ('Taxonomic lineage IDs (' in col)]
-        columns = [col for col in columns if col not in tax_cols + taxids_cols]
-        if len(tax_cols) > 0:
-            columns.append('Taxonomic lineage')
-        if len(taxids_cols) > 0:
-            columns.append('Taxonomic lineage (Ids)')
-    return columns, tax_cols, taxids_cols, tax_cols + taxids_cols
+        new_cols = [col for col in columns if col not in tax_cols + taxids_cols]
+        if len(tax_cols) > 0 and 'Taxonomic lineage' not in new_cols:
+            new_cols.append('Taxonomic lineage')
+        if len(taxids_cols) > 0 and 'Taxonomic lineage (Ids)' not in new_cols:
+            new_cols.append('Taxonomic lineage (Ids)')
+        if 'Taxonomic lineage (SPECIES)' in columns:
+            new_cols.append('Organism')
+        if 'Taxonomic lineage IDs (SPECIES)' in columns:
+            new_cols.append('Organism (ID)')
+        for col in ['Entry Name', 'Entry']:  # UPIMAPI requires these two columns to be present
+            if col not in new_cols:
+                new_cols.insert(0, col)
+    else:
+        new_cols = [            # default columns of UPIMAPI
+            'Entry', 'Entry Name', 'Organism', 'Organism (ID)', 'Taxonomic lineage', 'Taxonomic lineage (Ids)',
+            'Gene Names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
+            'Protein existence', 'Gene Ontology (GO)', 'Protein families', 'BRENDA', 'BioCyc', 'CDD', 'eggNOG',
+            'Ensembl', 'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway']
+        tax_cols = [            # default taxonomic columns of UPIMAPI (SPECIES is in "Organism")
+            'Taxonomic lineage (SUPERKINGDOM)', 'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)',
+            'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 'Taxonomic lineage (GENUS)']
+        taxids_cols = ['Taxonomic lineage IDs (SPECIES)']
+    return new_cols, tax_cols, taxids_cols, tax_cols + taxids_cols
 
 
 def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
@@ -522,32 +538,25 @@ def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
         # where the taxonomy has a '(' in it (e.g. 'Clostridium scindens (strain JCM 10418 / VPI 12708) (species)')
         lambda x: {part[-1]: ' ('.join(part[:-1]) for part in x if part[-1] != 'no rank'}))
     # Rename columns in old UniProt fashion
-    result = result.rename(columns={col: f'{prefix} ({col.upper()})' for col in result.columns})
+    result.rename(columns={col: f'{prefix} ({col.upper()})' for col in result.columns}, inplace=True)
+    for col in result.columns:
+        result[col] = result[col].str.lstrip()
     return result
 
 
 def uniprot_information_workflow(ids, output, max_iter=5, columns=None, step=1000, sleep_time=10):
     ids_done, ids_missing, result = check_ids_already_done(output, ids)
-    add_tax_cols = columns is None
-    tries, last_ids_missing = 0, None
-    ids_unmapped_output = f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
-    columns, tax_cols, taxids_cols, all_tax_cols = extract_lineage_columns(columns)
-    default_tax_cols = [
-        'Taxonomic lineage (SUPERKINGDOM)', 'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)',
-        'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 'Taxonomic lineage (GENUS)']
-    if add_tax_cols:
-        tax_cols += default_tax_cols
-        all_tax_cols += default_tax_cols
+    tries, last_ids_missing, ids_unmapped_output = 0, None, f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
+    new_cols, tax_cols, taxids_cols, all_tax_cols = select_columns(columns)
     uniprotinfo = pd.DataFrame()
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
         last_ids_missing = ids_missing
         info = get_uniprot_information(
-            ids_missing, step=step, columns=columns, max_tries=max_iter, sleep_time=sleep_time)
-        info.reset_index(inplace=True)
-        del info['index']
+            ids_missing, step=step, columns=new_cols, max_tries=max_iter, sleep_time=sleep_time)
+        info.reset_index(inplace=True, drop=True)
         if len(info) > 0:
-            ids_done += list(set(info['Entry'].tolist() + info['Entry Name'].tolist()))
+            ids_done += info['Entry'].unique().tolist() + info['Entry Name'].unique().tolist()
             uniprotinfo = pd.concat([uniprotinfo, info], ignore_index=True)
         ids_missing = list(set(last_ids_missing) - set(ids_done))
         if len(ids_missing) > 0:
@@ -557,33 +566,28 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, step=100
             else:
                 print('Failed to retrieve information for some IDs. Retrying request.')
                 tries += 1
-    if len(uniprotinfo) > 0:
-        tax_df = pd.DataFrame()
-        if len(tax_cols) > 0:
-            tax_df = make_taxonomic_lineage_df(uniprotinfo['Taxonomic lineage'], prefix='Taxonomic lineage')
-        if len(taxids_cols) > 0:
-            tax_df = pd.concat([tax_df, make_taxonomic_lineage_df(
-                uniprotinfo['Taxonomic lineage (Ids)'], prefix='Taxonomic lineage IDs')], axis=1)
-        # remove taxonomic lineage and taxonomic lineage (ids) columns if they were not supposed to be added
-        for col in all_tax_cols:
-            if col not in tax_df.columns:
-                del tax_df[col]
-        uniprotinfo = pd.concat([uniprotinfo, tax_df[all_tax_cols]], axis=1).rename(columns={
-            'Organism': 'Taxonomic lineage (SPECIES)'})
-        cols = uniprotinfo.columns.tolist() + [col for col in result.columns.tolist() if col not in uniprotinfo.columns]
-        if 'Taxonomic lineage (SPECIES)' in cols:
-            cols.remove('Taxonomic lineage (SPECIES)')
-            cols.append('Taxonomic lineage (SPECIES)')
-        if 'index' in result.columns:
-            del result['index']
-    else:
-        cols = result.columns.tolist()
-    result = pd.concat([result, uniprotinfo], ignore_index=True)
-    result[cols].to_csv(output, sep='\t', index=False)
+    if len(uniprotinfo) == 0:
+        return result[columns]
+    tax_df = pd.DataFrame()
+    if len(tax_cols) > 0:
+        tax_df = make_taxonomic_lineage_df(uniprotinfo['Taxonomic lineage'], prefix='Taxonomic lineage')
+    if len(taxids_cols) > 0:
+        tax_df = pd.concat([tax_df, make_taxonomic_lineage_df(
+            uniprotinfo['Taxonomic lineage (Ids)'], prefix='Taxonomic lineage IDs')], axis=1)
+    # rename columns to old UniProt fashion if those columns are to be outputted
+    # then remove the original columns if they are not to be outputted
+    col_conversion = {'Organism': 'Taxonomic lineage (SPECIES)', 'Organism (ID)': 'Taxonomic lineage IDs (SPECIES)'}
+    for k, v in col_conversion.items():
+        if v in columns:
+            uniprotinfo[v] = uniprotinfo[k]
+        if k not in columns:
+            del uniprotinfo[k]
+    uniprotinfo = pd.concat([uniprotinfo, tax_df], axis=1)
+    result = pd.concat([result, uniprotinfo[columns]], ignore_index=True)
     if len(ids_missing) == 0:
         print(f'Results for all IDs are available at {output}')
     else:
-        open(ids_unmapped_output, 'a').write('\n'.join(ids_missing))
+        open(ids_unmapped_output, 'w').write('\n'.join(ids_missing))
         print(f"Maximum iterations were made. Results related to {str(len(ids_missing))} IDs were not obtained. "
               f"IDs with missing information are available at {ids_unmapped_output} and information obtained is "
               f"available at {output}")
@@ -1371,10 +1375,10 @@ def upimapi():
                 table_output, columns=args.columns, databases=args.databases, threads=15))
 
         # ID mapping through API
-        uniprot_information_workflow(
+        result = uniprot_information_workflow(
             ids, table_output, columns=args.columns, step=args.step, max_iter=args.max_tries,
             sleep_time=args.sleep)
-        result = pd.read_csv(table_output, sep='\t', low_memory=False)
+        result.to_csv(table_output, sep='\t', index=False)
 
         if not args.no_annotation:
             blast = parse_blast(f'{args.output}/aligned.blast')
