@@ -567,7 +567,7 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, step=100
                 print('Failed to retrieve information for some IDs. Retrying request.')
                 tries += 1
     if len(uniprotinfo) == 0:
-        return result[columns]
+        return result
     tax_df = pd.DataFrame()
     if len(tax_cols) > 0:
         tax_df = make_taxonomic_lineage_df(uniprotinfo['Taxonomic lineage'], prefix='Taxonomic lineage')
