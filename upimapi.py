@@ -548,6 +548,7 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, step=100
     ids_done, ids_missing, result = check_ids_already_done(output, ids)
     tries, last_ids_missing, ids_unmapped_output = 0, None, f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
     new_cols, tax_cols, taxids_cols, all_tax_cols = select_columns(columns)
+    columns = new_cols if columns is None else columns
     uniprotinfo = pd.DataFrame()
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
         print(f'Information already gathered for {int(len(ids_done) / 2)} ids. Still missing for {len(ids_missing)}.')
