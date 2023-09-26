@@ -249,7 +249,7 @@ def uniprot_request(ids, columns=None, output_format='tsv'):
     Output:
         Returns the content of the response from UniProt
     """
-    fields = f'&fields={string4mapping(columns=columns)}'
+    fields = f'&fields={string4mapping(columns=columns)}' if output_format == 'tsv' else ''
     WEBSITE_API = api_info['servers'][0]['url']
     resp = get_url(f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}{fields}&format={output_format}")
     return resp.text
