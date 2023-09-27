@@ -28,7 +28,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.12.1'
+__version__ = '1.12.2'
 
 
 def load_api_info():
@@ -306,6 +306,8 @@ def basic_idmapping_batch(ids, from_db, to_db, step=1000):
     """
     Allows to retrieve millions of IDs at once, there seems to be some limit causing UniProt's API to fail with
     "Request Entity Too Large for url".
+    :param to_db:
+    :param from_db:
     :param step:
     :param ids:
     :return:
@@ -516,9 +518,13 @@ def select_columns(columns):
             'Ensembl', 'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway']
         tax_cols = [            # default taxonomic columns of UPIMAPI (SPECIES is in "Organism")
             'Taxonomic lineage (SUPERKINGDOM)', 'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)',
-            'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 'Taxonomic lineage (GENUS)']
+            'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 'Taxonomic lineage (GENUS)',
+            'Taxonomic lineage (SPECIES)']
         taxids_cols = ['Taxonomic lineage IDs (SPECIES)']
-    return new_cols, tax_cols, taxids_cols, tax_cols + taxids_cols
+        columns = new_cols + tax_cols + taxids_cols
+        for col in ['Organism', 'Organism (ID)', 'Taxonomic lineage', 'Taxonomic lineage (Ids)']:
+            columns.remove(col)
+    return columns, new_cols, tax_cols, taxids_cols
 
 
 def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
@@ -547,7 +553,7 @@ def make_taxonomic_lineage_df(tax_lineage_col, prefix='Taxonomic lineage IDs'):
 def uniprot_information_workflow(ids, output, max_iter=5, columns=None, step=1000, sleep_time=10):
     ids_done, ids_missing, result = check_ids_already_done(output, ids)
     tries, last_ids_missing, ids_unmapped_output = 0, None, f"{'/'.join(output.split('/')[:-1])}/ids_unmapped.txt"
-    new_cols, tax_cols, taxids_cols, all_tax_cols = select_columns(columns)
+    columns, new_cols, tax_cols, taxids_cols = select_columns(columns)
     columns = new_cols if columns is None else columns
     uniprotinfo = pd.DataFrame()
     while len(ids_missing) > 0 and tries < max_iter and ids_missing != last_ids_missing:
@@ -583,7 +589,8 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, step=100
             uniprotinfo[v] = uniprotinfo[k]
         if k not in columns:
             del uniprotinfo[k]
-    uniprotinfo = pd.concat([uniprotinfo, tax_df], axis=1)
+    tax_df_gut_cols = [col for col in tax_df.columns if col not in col_conversion.values()]     # don't repeat columns that were added in the previous loop
+    uniprotinfo = pd.concat([uniprotinfo, tax_df[tax_df_gut_cols]], axis=1)
     result = pd.concat([result, uniprotinfo[columns]], ignore_index=True)
     if len(ids_missing) == 0:
         print(f'Results for all IDs are available at {output}')

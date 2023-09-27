@@ -1,6 +1,6 @@
 {% set name = "upimapi" %}
-{% set version = "1.8.3" %}
-{% set sha256 = "e5eda4953af1bbb20c7a4dc79bb8975603bd0cac666218cdc753f8cf3f9ca716" %}
+{% set version = "1.12.1" %}
+{% set sha256 = "c806ba0804abf2eb482b75be3bd7312d8b117048ba800ebff788b06f430b188f" %}
 
 package:
   name: {{ name|lower }}
@@ -13,10 +13,12 @@ source:
 build:
   noarch: generic
   number: 0
+  run_exports:
+    - { { pin_subpackage(name, max_pin="x.x") } }
   script: >
     mkdir -p $PREFIX/bin && 
-    cp upimapi.py $PREFIX/bin && 
-    chmod +x $PREFIX/bin/upimapi.py && 
+    cp upimapi.py $PREFIX/bin &&
+    chmod +x $PREFIX/bin/upimapi.py &&
     ln -s $PREFIX/bin/upimapi.py $PREFIX/bin/upimapi
 
 requirements:
@@ -31,7 +33,7 @@ requirements:
 
 test:
   commands:
-    - upimapi.py -v 
+    - upimapi -v
 
 about:
   home: https://github.com/iquasere/UPIMAPI
@@ -47,7 +49,7 @@ about:
     https://www.uniprot.org/uploadlists/, allowing for retrieval of information
     from thousands of IDs in one go, while still relying on the web service.
   doc_url: https://github.com/iquasere/UPIMAPI/blob/master/README.md
-  dev_url: https://github.com/iquasere/UPIMAPI 
+  dev_url: https://github.com/iquasere/UPIMAPI
 
 extra:
   recipe-maintainers:

@@ -39,7 +39,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: IDs inputted through TXT file (comma-separated)
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -cols 'Entry&KEGG&Interacts with&Taxonomic lineage (SUPERKINGDOM)&Taxonomic lineage (SPECIES)&Taxonomic lineage IDs (SUPERKINGDOM)&Taxonomic lineage IDs (SPECIES)'"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/cicd/ids.csv -cols 'Entry&KEGG&Interacts with&Taxonomic lineage (SUPERKINGDOM)&Taxonomic lineage (SPECIES)&Taxonomic lineage IDs (SUPERKINGDOM)&Taxonomic lineage IDs (SPECIES)'"
 
   txt-file-newline-separated:
     runs-on: ubuntu-latest
@@ -53,7 +53,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: Full IDs inputted through TXT file (newline-separated)
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/full_ids.txt"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/cicd/full_ids.txt"
 
   blast-file:
     runs-on: ubuntu-latest
@@ -67,7 +67,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: IDs inputted through BLAST file
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.blast -rd resources_directory --blast"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/cicd/ids.blast -rd resources_directory --blast"
 
   get-fasta-sequences:
     runs-on: ubuntu-latest
@@ -81,7 +81,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: Obtain FASTA sequences
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --fasta"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/cicd/ids.csv -rd resources_directory --fasta"
 
   basic-id-mapping:
     runs-on: ubuntu-latest
@@ -95,7 +95,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: Perform basic ID mapping
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/ids.csv -rd resources_directory --from-db 'UniProtKB AC/ID' --to-db 'EMBL/GenBank/DDBJ CDS'"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/cicd/ids.csv -rd resources_directory --from-db 'UniProtKB AC/ID' --to-db 'EMBL/GenBank/DDBJ CDS'"
 
   full-workflow:
     runs-on: ubuntu-latest
@@ -109,4 +109,4 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: Full workflow, TaxIDs DB at Species level
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/ci/proteomes.fasta -rd resources_directory -db taxids --taxids 2203,2223,2209,2162,119484,35554,29543,863"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/cicd/proteomes.fasta -rd resources_directory -db taxids --taxids 2203,2223,2209,2162,119484,35554,29543,863"
