@@ -28,7 +28,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.12.2'
+__version__ = '1.12.3'
 
 
 def load_api_info():
@@ -495,35 +495,33 @@ def select_columns(columns):
     :return: tax_cols: list - of taxonomic columns to retrieve information from
     :return: taxids_cols: list - of taxid columns to retrieve information from
     """
-    if columns is not None:
-        tax_cols = [col for col in columns if ('Taxonomic lineage (' in col and col != 'Taxonomic lineage (Ids)')]
-        taxids_cols = [col for col in columns if ('Taxonomic lineage IDs (' in col)]
-        new_cols = [col for col in columns if col not in tax_cols + taxids_cols]
-        if len(tax_cols) > 0 and 'Taxonomic lineage' not in new_cols:
-            new_cols.append('Taxonomic lineage')
-        if len(taxids_cols) > 0 and 'Taxonomic lineage (Ids)' not in new_cols:
-            new_cols.append('Taxonomic lineage (Ids)')
-        if 'Taxonomic lineage (SPECIES)' in columns:
-            new_cols.append('Organism')
-        if 'Taxonomic lineage IDs (SPECIES)' in columns:
-            new_cols.append('Organism (ID)')
-        for col in ['Entry Name', 'Entry']:  # UPIMAPI requires these two columns to be present
-            if col not in new_cols:
-                new_cols.insert(0, col)
-    else:
-        new_cols = [            # default columns of UPIMAPI
+    if columns is None:
+        columns = [            # default columns of UPIMAPI
             'Entry', 'Entry Name', 'Organism', 'Organism (ID)', 'Taxonomic lineage', 'Taxonomic lineage (Ids)',
             'Gene Names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
             'Protein existence', 'Gene Ontology (GO)', 'Protein families', 'BRENDA', 'BioCyc', 'CDD', 'eggNOG',
-            'Ensembl', 'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway']
-        tax_cols = [            # default taxonomic columns of UPIMAPI (SPECIES is in "Organism")
+            'Ensembl', 'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway',
             'Taxonomic lineage (SUPERKINGDOM)', 'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)',
             'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 'Taxonomic lineage (GENUS)',
-            'Taxonomic lineage (SPECIES)']
-        taxids_cols = ['Taxonomic lineage IDs (SPECIES)']
-        columns = new_cols + tax_cols + taxids_cols
-        for col in ['Organism', 'Organism (ID)', 'Taxonomic lineage', 'Taxonomic lineage (Ids)']:
-            columns.remove(col)
+            'Taxonomic lineage (SPECIES)', 'Taxonomic lineage IDs (SPECIES)']
+    tax_cols = [col for col in columns if ('Taxonomic lineage (' in col and col != 'Taxonomic lineage (Ids)')]
+    taxids_cols = [col for col in columns if ('Taxonomic lineage IDs (' in col)]
+    new_cols = [col for col in columns if col not in tax_cols + taxids_cols]
+    conditions = {
+        len(tax_cols) > 0 and 'Taxonomic lineage' not in new_cols: 'Taxonomic lineage',
+        len(taxids_cols) > 0 and 'Taxonomic lineage (Ids)' not in new_cols: 'Taxonomic lineage (Ids)',
+        'Taxonomic lineage (SPECIES)' in columns and 'Organism' not in new_cols: 'Organism',
+        'Taxonomic lineage IDs (SPECIES)' in columns and 'Organism (ID)' not in new_cols: 'Organism (ID)'}
+    for cond, col in conditions.items():    # check if cond (key) is True, then append or not the col (value)
+        if cond:
+            new_cols.append(col)
+    for col in ['Entry Name', 'Entry']:     # UPIMAPI requires these two columns to be present
+        if col not in new_cols:
+            new_cols.insert(0, col)
+    print('columns:', columns)
+    print('new_cols:', new_cols)
+    print('tax_cols:', tax_cols)
+    print('taxids_cols', taxids_cols)
     return columns, new_cols, tax_cols, taxids_cols
 
 
@@ -626,6 +624,8 @@ def parse_fasta(file):
 
 
 def get_ids(args_input, input_type, full_id='auto'):
+    if args_input.endswith(('.zip', '.tar', '.gz', '.bz2')):
+        exit('File seems to be compressed! If not, please change its extension.')
     if input_type == 'blast':
         ids = parse_blast(args_input)['sseqid'].tolist()
     elif input_type == 'txt':
