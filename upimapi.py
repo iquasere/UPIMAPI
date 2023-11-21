@@ -504,9 +504,19 @@ def select_columns(columns):
             'Taxonomic lineage (SUPERKINGDOM)', 'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)',
             'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 'Taxonomic lineage (GENUS)',
             'Taxonomic lineage (SPECIES)', 'Taxonomic lineage IDs (SPECIES)']
-    tax_cols = [col for col in columns if ('Taxonomic lineage (' in col and col != 'Taxonomic lineage (Ids)')]
-    taxids_cols = [col for col in columns if ('Taxonomic lineage IDs (' in col)]
-    new_cols = [col for col in columns if col not in tax_cols + taxids_cols]
+    tax_cols = [col for col in columns if ('Taxonomic lineage (' in col and col not in [
+        'Taxonomic lineage (SPECIES)', 'Taxonomic lineage (Ids)'])]
+    taxids_cols = [col for col in columns if (
+            'Taxonomic lineage IDs (' in col and col not in 'Taxonomic lineage IDs (SPECIES)')]
+    for col in ['Entry', 'Entry Name']:
+        if col not in columns:
+            columns = [col] + columns
+    new_cols = [col for col in columns if col not in tax_cols + taxids_cols + [
+        'Taxonomic lineage (SPECIES)', 'Taxonomic lineage IDs (SPECIES)']]
+    col_conversion = {'Organism': 'Taxonomic lineage (SPECIES)', 'Organism (ID)': 'Taxonomic lineage IDs (SPECIES)'}
+    for k, v in col_conversion.items():
+        if v in columns and k not in new_cols:
+            new_cols.append(k)
     conditions = {
         len(tax_cols) > 0 and 'Taxonomic lineage' not in new_cols: 'Taxonomic lineage',
         len(taxids_cols) > 0 and 'Taxonomic lineage (Ids)' not in new_cols: 'Taxonomic lineage (Ids)',
@@ -518,10 +528,6 @@ def select_columns(columns):
     for col in ['Entry Name', 'Entry']:     # UPIMAPI requires these two columns to be present
         if col not in new_cols:
             new_cols.insert(0, col)
-    print('columns:', columns)
-    print('new_cols:', new_cols)
-    print('tax_cols:', tax_cols)
-    print('taxids_cols', taxids_cols)
     return columns, new_cols, tax_cols, taxids_cols
 
 
@@ -585,8 +591,8 @@ def uniprot_information_workflow(ids, output, max_iter=5, columns=None, step=100
     for k, v in col_conversion.items():
         if v in columns:
             uniprotinfo[v] = uniprotinfo[k]
-        if k not in columns:
-            del uniprotinfo[k]
+            if k not in columns:
+                del uniprotinfo[k]
     tax_df_gut_cols = [col for col in tax_df.columns if col not in col_conversion.values()]     # don't repeat columns that were added in the previous loop
     uniprotinfo = pd.concat([uniprotinfo, tax_df[tax_df_gut_cols]], axis=1)
     result = pd.concat([result, uniprotinfo[columns]], ignore_index=True)
