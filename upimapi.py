@@ -508,9 +508,9 @@ def select_columns(columns):
         'Taxonomic lineage (SPECIES)', 'Taxonomic lineage (Ids)'])]
     taxids_cols = [col for col in columns if (
             'Taxonomic lineage IDs (' in col and col not in 'Taxonomic lineage IDs (SPECIES)')]
-    for col in ['Entry', 'Entry Name']:
+    for col in ['Entry Name', 'Entry']:
         if col not in columns:
-            columns = [col] + columns
+            columns.insert(0, col)
     new_cols = [col for col in columns if col not in tax_cols + taxids_cols + [
         'Taxonomic lineage (SPECIES)', 'Taxonomic lineage IDs (SPECIES)']]
     col_conversion = {'Organism': 'Taxonomic lineage (SPECIES)', 'Organism (ID)': 'Taxonomic lineage IDs (SPECIES)'}
@@ -518,12 +518,12 @@ def select_columns(columns):
         if v in columns and k not in new_cols:
             new_cols.append(k)
     conditions = {
-        len(tax_cols) > 0 and 'Taxonomic lineage' not in new_cols: 'Taxonomic lineage',
-        len(taxids_cols) > 0 and 'Taxonomic lineage (Ids)' not in new_cols: 'Taxonomic lineage (Ids)',
-        'Taxonomic lineage (SPECIES)' in columns and 'Organism' not in new_cols: 'Organism',
-        'Taxonomic lineage IDs (SPECIES)' in columns and 'Organism (ID)' not in new_cols: 'Organism (ID)'}
+        'len(tax_cols) > 0 and "Taxonomic lineage" not in new_cols': 'Taxonomic lineage',
+        'len(taxids_cols) > 0 and "Taxonomic lineage (Ids)" not in new_cols': 'Taxonomic lineage (Ids)',
+        '"Taxonomic lineage (SPECIES)" in columns and "Organism" not in new_cols': 'Organism',
+        '"Taxonomic lineage IDs (SPECIES)" in columns and "Organism (ID)" not in new_cols': 'Organism (ID)'}
     for cond, col in conditions.items():    # check if cond (key) is True, then append or not the col (value)
-        if cond:
+        if eval(cond):
             new_cols.append(col)
     for col in ['Entry Name', 'Entry']:     # UPIMAPI requires these two columns to be present
         if col not in new_cols:
