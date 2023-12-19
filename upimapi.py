@@ -28,7 +28,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.12.3'
+__version__ = '1.13.0'
 
 
 def load_api_info():
@@ -165,10 +165,29 @@ def get_arguments():
     diamond_args.add_argument(
         '--diamond-mode', help="Mode to run DIAMOND with [fast]", default='fast',
         choices=['fast', 'mid_sensitive', 'sensitive', 'more_sensitive', 'very_sensitive', 'ultra_sensitive'])
+
+    special_functions = parser.add_argument_group('Special functions')
+    special_functions.add_argument(
+        "--show-available-fields", action="store_true", default=False,
+        help="Outputs the fields available from the API.")
+
     args = parser.parse_args()
+    if args.show_available_fields:
+        sys.exit('\n'.join(columns_dict.keys()))
+
     args.output = args.output.rstrip('/')
     args.resources_directory = args.resources_directory.rstrip('/')
     args.columns = args.columns.split('&') if args.columns else None
+
+    columns_fine = True
+    for col in args.columns:
+        if col not in columns_dict.keys():
+            print(
+                f'ERR: [{col}] is not a valid column name for ID mapping. For more information, check '
+                f'https://github.com/iquasere/UPIMAPI/tree/master#sometimes-the-return-fields-are-not-properly-updated')
+            columns_fine = False
+    if not columns_fine:
+        sys.exit(1)
     if args.taxids is not None:
         args.taxids = args.taxids.split(',')
     return args
