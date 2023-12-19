@@ -180,12 +180,13 @@ def get_arguments():
     args.columns = args.columns.split('&') if args.columns else None
 
     columns_fine = True
-    for col in args.columns:
-        if col not in columns_dict.keys():
-            print(
-                f'ERR: [{col}] is not a valid column name for ID mapping. For more information, check '
-                f'https://github.com/iquasere/UPIMAPI/tree/master#sometimes-the-return-fields-are-not-properly-updated')
-            columns_fine = False
+    if args.columns:
+        for col in args.columns:
+            if col not in columns_dict.keys() and not col.startswith('Taxonomic lineage'):
+                print(
+                    f'ERR: [{col}] is not a valid column name for ID mapping. For more information, check '
+                    f'https://github.com/iquasere/UPIMAPI/tree/master#sometimes-the-return-fields-are-not-properly-updated')
+                columns_fine = False
     if not columns_fine:
         sys.exit(1)
     if args.taxids is not None:
