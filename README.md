@@ -1,8 +1,11 @@
 # UniProt Id Mapping through API
 
 A tool for retrieving huge ammounts of information from UniProt! 
+
 UPIMAPI is a command line interface for using UniProt's API, which allows to access [UniProt's ID mapping](https://www.uniprot.org/uploadlists/) programmatically!
+
 UPIMAPI can handle big numbers of UniProt IDs (like, millions) for which information can be obtained in a single command.
+
 UPIMAPI also allows to first perform annotation with DIAMOND, connecting its powerfull annotation with the convenience of directly obtaining information from UniProt.
 
 ### Index
@@ -18,7 +21,7 @@ UPIMAPI also allows to first perform annotation with DIAMOND, connecting its pow
 
 To install UPIMAPI through Bioconda, run
 ```
-conda install -c conda-forge -c bioconda upimapi
+conda install -c bioconda upimapi
 ```
 To check if UPIMAPI was installed correctly, run
 ```
@@ -56,7 +59,7 @@ If alternatively you only want to use SwissProt (the manually curated part of Un
 
 If, for both pure and mixed cultures, the taxonomic composition is known, UPIMAPI can build a database with the reference proteomes of the known taxa. 
 
-To build a reference for specific taxa, specify the database as ```--database taxids```, and the tax IDs as ```--tax-ids taxid1 taxid2 taxid3 ...```.
+To build a reference for specific taxa, specify the database as ```--database taxids```, and the tax IDs as ```--tax-ids taxid1,taxid2,taxid3 ...```.
 
 #### Input a custom database
 
