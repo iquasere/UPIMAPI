@@ -28,7 +28,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.13.1'
+__version__ = '1.13.2'
 
 
 def load_api_info():
@@ -195,7 +195,7 @@ def get_arguments():
 
 
 def timed_message(message):
-    print(f'{strftime("%Y-%m-%d %H:%M:%S", gmtime())}: {message}')
+    print(f'[{strftime("%Y-%m-%d %H:%M:%S", gmtime())}] {message}')
 
 
 def human_time(seconds):
@@ -275,7 +275,7 @@ def uniprot_request(ids, columns=None, output_format='tsv'):
     return resp.text
 
 
-def split(a, n):
+def split_list(a, n):
     k, m = divmod(len(a), n)
     return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n))
 
@@ -347,7 +347,7 @@ def basic_idmapping_batch(ids, from_db, to_db, step=1000):
 
 def basic_idmapping_multiprocess(ids, output, from_db, to_db, step=1000, threads=15):
     result = pd.DataFrame()
-    ids_groups = split(ids, threads)
+    ids_groups = split_list(ids, threads)
     with Manager() as m:
         with m.Pool() as p:
             mapping_results = p.starmap(basic_idmapping_batch, [(
@@ -392,7 +392,7 @@ def get_valid_entries_batch(ids, step=1000):
 
 def get_valid_entries_multiprocess(ids, step=1000, threads=15):
     valid_entries = []
-    ids_groups = split(ids, threads)
+    ids_groups = split_list(ids, threads)
     with Manager() as m:
         with m.Pool() as p:
             result = p.starmap(get_valid_entries_batch, [(ids_group, step) for ids_group in ids_groups])
@@ -923,7 +923,7 @@ def get_upper_taxids(taxid, tax_df):
 def parse_taxonomy(data, tax_tsv_df, threads=15):
     tax_tsv_df.set_index('name', inplace=True)
     tax_tsv_df['taxid'] = tax_tsv_df['taxid'].astype(str)
-    all_classifications = split(data['organism_classification'].drop_duplicates().tolist(), threads)
+    all_classifications = split_list(data['organism_classification'].drop_duplicates().tolist(), threads)
     with Manager() as m:
         with m.Pool() as p:
             result = p.starmap(lineages_to_columns, [(classifications, tax_tsv_df)
