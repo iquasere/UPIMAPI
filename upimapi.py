@@ -35,12 +35,19 @@ def load_api_info():
     return yaml.safe_load(requests.get('https://rest.uniprot.org/docs/uniprot-openapi3.yaml').text)
 
 
-def get_url(url, **kwargs):
-    response = requests.get(url, **kwargs)
-    if not response.ok:
-        response.raise_for_status()
-        sys.exit(response.txt)
-    return response
+def get_url(url, max_tries = 3, **kwargs):
+    tries = 0
+    response = None
+    while tries < max_tries + 1:
+        try:
+            response = requests.get(url, **kwargs)
+            if response.ok:
+                return response
+        except:
+            tries += 1
+            sleep(5)
+    response.raise_for_status()
+    sys.exit(response.txt)
 
 
 def get_uniprot_columns():
@@ -124,7 +131,7 @@ def get_arguments():
         help="If true, UPIMAPI will not check if IDs are valid before mapping [false]")
     parser.add_argument(
         "--skip-db-check", action="store_true", default=False,
-        help="DEPRECATED: This parameter does nothing now, and will be removed in future versions.")
+        help="So UPIMAPI doesn't check for (FASTA) database existence [false]")
     parser.add_argument(
         "--mirror", choices=['expasy', 'uniprot', 'ebi'], default='expasy',
         help="From where to download UniProt database [expasy]")
@@ -800,7 +807,7 @@ def download_uniprot(output_folder, mirror='expasy'):
         os.remove(file)
 
 
-def download_fasta_database(database, output_folder, taxids=None, max_tries=3, mirror='expasy'):
+def build_reference_database(database, output_folder, taxids=None, max_tries=3, mirror='expasy'):
     if database == 'uniprot':
         download_uniprot(output_folder, mirror=mirror)
     elif database == 'swissprot':
@@ -814,10 +821,12 @@ def download_fasta_database(database, output_folder, taxids=None, max_tries=3, m
                 f.write(get_proteome_for_taxid(taxid, max_tries=max_tries))
 
 
-def must_download_database(database, db2suffix):
+def must_build_database(database, resources_folder):
+    db2suffix = {'uniprot': 'uniprot.fasta', 'swissprot': 'uniprot_sprot.fasta', 'taxids': 'taxids_database.fasta'}
     if database in db2suffix.keys():
-        return not os.path.isfile(db2suffix[database])
-    return False        # custom database
+        if os.path.isfile(f'{resources_folder}/{db2suffix[database]}'):
+            return str2bool(input(f'{resources_folder}/{db2suffix[database]} exists. Overwrite? [Y/N] '))
+    return True
 
 
 def get_tabular_taxonomy(output):
@@ -923,7 +932,7 @@ def get_upper_taxids(taxid, tax_df):
 def parse_taxonomy(data, tax_tsv_df, threads=15):
     tax_tsv_df.set_index('name', inplace=True)
     tax_tsv_df['taxid'] = tax_tsv_df['taxid'].astype(str)
-    all_classifications = split_list(data['organism_classification'].drop_duplicates().tolist(), threads)
+    all_classifications = split(data['organism_classification'].drop_duplicates().tolist(), threads)
     with Manager() as m:
         with m.Pool() as p:
             result = p.starmap(lineages_to_columns, [(classifications, tax_tsv_df)
@@ -1340,27 +1349,24 @@ def upimapi():
 
     # Annotation with DIAMOND
     if not args.no_annotation:
-        db2file = {db: f'{args.resources_directory}/{filename}' for db, filename in [
-            ('uniprot', 'uniprot.fasta'), ('swissprot', 'uniprot_sprot.fasta'), ('taxids', 'taxids_database.fasta')]}
+        db2file = {'uniprot': f'{args.resources_directory}/uniprot.fasta',
+                   'swissprot': f'{args.resources_directory}/uniprot_sprot.fasta',
+                   'taxids': f'{args.resources_directory}/taxids_database.fasta'}
         if args.database in db2file.keys():
             database = db2file[args.database]
         else:
-            database = args.database        # custom database, must have UniProt IDs as sequence names
+            database = args.database
 
-        if not database.endswith(".dmnd"):                  # database is FASTA or one of "uniprot", "swissprot" or "taxids", or not valid
+        if not args.skip_db_check:
+            if must_build_database(args.database, args.resources_directory):
+                build_reference_database(
+                    args.database, args.resources_directory, taxids=args.taxids, max_tries=args.max_tries,
+                    mirror=args.mirror)
+        if not database.endswith(".dmnd"):
             diamond_formatted = f"{'.'.join(database.split('.')[:-1])}.dmnd"
-            if not os.path.isfile(diamond_formatted):               # DMND version of database not available
-                if must_download_database(args.database, db2file):  # check if expected FASTA file exists
-                    print(f'{args.database} database not found at {args.resources_directory}. '
-                          f'Downloading in FASTA version.')
-                    download_fasta_database(
-                        args.database, args.resources_directory, taxids=args.taxids, max_tries=args.max_tries,
-                        mirror=args.mirror)
-                print(f'DMND formatted version of database not found at: {diamond_formatted}')
+            if not os.path.isfile(diamond_formatted):
                 make_diamond_database(database, diamond_formatted)
             database = diamond_formatted
-        if not os.path.isfile(database):
-            sys.exit(f'Database [{database}] not found! Exiting...')  # only happens for DMND or custom databases
         (b, c) = block_size_and_index_chunks(
             argsb=args.block_size, argsc=args.index_chunks, memory=args.max_memory)
         run_diamond(
