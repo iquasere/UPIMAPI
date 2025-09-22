@@ -28,11 +28,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.13.2'
-
-
-def load_api_info():
-    return yaml.safe_load(requests.get('https://rest.uniprot.org/docs/uniprot-openapi3.yaml').text)
+__version__ = '1.14.0'
 
 
 def get_url(url, max_tries = 3, **kwargs):
@@ -73,7 +69,7 @@ def get_id_mapping_fields():
     return froms, tos
 
 
-api_info = load_api_info()
+ID_MAPPING_API = "https://rest.uniprot.org/idmapping"
 columns_dict = get_uniprot_columns()
 from_fields, to_fields = get_id_mapping_fields()
 
@@ -127,8 +123,8 @@ def get_arguments():
         "--skip-id-mapping", action="store_true", default=False,
         help="If true, UPIMAPI will not perform ID mapping [false]")
     parser.add_argument(
-        "--skip-id-checking", action="store_true", default=False,
-        help="If true, UPIMAPI will not check if IDs are valid before mapping [false]")
+        "--skip-id-checking", action="store_true", default=True,
+        help="[DEPRECATED] UPIMAPI had to validate IDs before mapping, now it doesn't need to. This parameter is kept for backwards compatibility.")
     parser.add_argument(
         "--skip-db-check", action="store_true", default=False,
         help="So UPIMAPI doesn't check for (FASTA) database existence [false]")
@@ -264,6 +260,25 @@ def parallelize_on_rows(data, func, num_of_processes=8, **kwargs):
     return parallelize(data, partial(run_on_subset, func, kwargs), num_of_processes)
 
 
+def get_id_mapping_job(ids):
+    data = {"from": "UniProtKB_AC-ID", "to": "UniProtKB", "ids": ids}
+    r = requests.post(f"{ID_MAPPING_API}/run", data=data)
+    r.raise_for_status()
+    return r.json()["jobId"]
+
+def poll_id_mapping_job(job_id):
+    while True:
+        r = requests.get(f"{ID_MAPPING_API}/status/{job_id}")
+        r.raise_for_status()
+        job = r.json()
+        if "jobStatus" in job:
+            # job is still being process
+            sleep(3)
+        else:
+            # got redirected to the response
+            return job
+
+
 def uniprot_request(ids, columns=None, output_format='tsv'):
     """
     Input:
@@ -276,10 +291,16 @@ def uniprot_request(ids, columns=None, output_format='tsv'):
     Output:
         Returns the content of the response from UniProt
     """
-    fields = f'&fields={string4mapping(columns=columns)}' if output_format == 'tsv' else ''
-    WEBSITE_API = api_info['servers'][0]['url']
-    resp = get_url(f"{WEBSITE_API}/uniprotkb/accessions?accessions={','.join(ids)}{fields}&format={output_format}")
-    return resp.text
+    result = ''
+    fields_string = f'&fields={string4mapping(columns=columns)}' if output_format == 'tsv' else ''
+    job_id = get_id_mapping_job(ids)
+    basic_mapping = poll_id_mapping_job(job_id)
+    resp = requests.get(f"{ID_MAPPING_API}/uniprotkb/results/{job_id}?format={output_format}{fields_string}")
+    result = resp.text
+    while resp.links.get("next", {}).get("url"):
+        resp = requests.get(resp.links["next"]["url"])
+        result += resp.text
+    return result
 
 
 def split_list(a, n):
@@ -296,14 +317,14 @@ def submit_id_mapping(from_db, to_db, ids):
     :return:
     """
     data = {"from": from_fields[from_db], "to": to_fields[to_db], "ids": ids}
-    r = requests.post(f"{api_info['servers'][0]['url']}/idmapping/run", data=data)
+    r = requests.post(f"{ID_MAPPING_API}/idmapping/run", data=data)
     r.raise_for_status()
     return r.json()["jobId"]
 
 
 def get_id_mapping_results(job_id):
     while True:
-        r = get_url(f"{api_info['servers'][0]['url']}/idmapping/status/{job_id}")
+        r = get_url(f"{ID_MAPPING_API}/idmapping/status/{job_id}")
         job = r.json()
         if "jobStatus" in job:
             if job["jobStatus"] == "RUNNING":
@@ -432,6 +453,7 @@ def get_uniprot_information(ids, step=1000, sleep_time=30, columns=None, max_tri
                 data = uniprot_request(ids[i:j], columns=columns)
                 if len(data) > 0:
                     uniprotinfo = pd.read_csv(StringIO(data), sep='\t')
+                    del uniprotinfo['From']
                     result = pd.concat([result, uniprotinfo[uniprotinfo.columns.tolist()]])
                 sleep(sleep_time)
                 done = True
@@ -528,7 +550,7 @@ def select_columns(columns):
             'Gene Names', 'Protein names', 'EC number', 'Function [CC]', 'Pathway', 'Keywords',
             'Protein existence', 'Gene Ontology (GO)', 'Protein families', 'BRENDA', 'BioCyc', 'CDD', 'eggNOG',
             'Ensembl', 'InterPro', 'KEGG', 'Pfam', 'Reactome', 'RefSeq', 'UniPathway',
-            'Taxonomic lineage (SUPERKINGDOM)', 'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)',
+            'Taxonomic lineage (KINGDOM)', 'Taxonomic lineage (PHYLUM)', 'Taxonomic lineage (CLASS)',
             'Taxonomic lineage (ORDER)', 'Taxonomic lineage (FAMILY)', 'Taxonomic lineage (GENUS)',
             'Taxonomic lineage (SPECIES)', 'Taxonomic lineage IDs (SPECIES)']
     tax_cols = [col for col in columns if ('Taxonomic lineage (' in col and col not in [
@@ -679,8 +701,7 @@ def get_ids(args_input, input_type, full_id='auto'):
         sp_ids = [ide.split('|')[1] for ide in ids if ide.startswith('sp')]
         return return_ids, full_id, sp_ids
     return_ids = [ide for ide in ids if ide not in ['*', '']]
-    return return_ids, full_id, return_ids
-    # second return_ids is just mock to return the same type of output as for sp_ids
+    return return_ids, full_id, return_ids              # second return_ids is just mock to return the same type of output as for sp_ids
 
 
 def run_command(bash_command, print_message=True):
@@ -1398,14 +1419,6 @@ def upimapi():
     if args.from_db != 'UniProtKB AC/ID' or args.to_db != 'UniProtKB':
         basic_idmapping_multiprocess(ids, table_output, args.from_db, args.to_db, threads=args.threads)
         return
-
-    if not args.skip_id_checking:
-        # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those IDs.
-        ids, not_valid = get_valid_entries_multiprocess(ids, threads=args.threads)
-        with open(f'{args.output}/valid_ids.txt', 'w') as f:
-            f.write('\n'.join(ids))
-        with open(f'{args.output}/not_valid_ids.txt', 'w') as f:
-            f.write('\n'.join(not_valid))
 
     # Get UniProt information
     if not args.fasta:
