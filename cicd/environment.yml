@@ -5,7 +5,7 @@ channels:
   - defaults
 dependencies:
     - pandas
-    - diamond
+    - diamond >=2.1.13
     - psutil
     - tqdm
     - requests

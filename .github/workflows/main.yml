@@ -39,7 +39,7 @@ jobs:
       - name: Load Docker image
         run: docker load --input /tmp/upimapi.tar
       - name: IDs inputted through TXT file (comma-separated)
-        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/cicd/ids.csv -cols 'Entry&KEGG&Interacts with&Taxonomic lineage (SUPERKINGDOM)&Taxonomic lineage (SPECIES)&Taxonomic lineage IDs (SUPERKINGDOM)&Taxonomic lineage IDs (SPECIES)'"
+        run: docker run upimapi /bin/bash -c "upimapi -i UPIMAPI/cicd/ids.csv -cols 'Entry&KEGG&Interacts with&Taxonomic lineage (KINGDOM)&Taxonomic lineage (SPECIES)&Taxonomic lineage IDs (KINGDOM)&Taxonomic lineage IDs (SPECIES)'"
 
   txt-file-newline-separated:
     runs-on: ubuntu-latest
