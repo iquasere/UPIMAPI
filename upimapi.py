@@ -143,7 +143,7 @@ def get_arguments():
              "will be used as reference\n"
              "\t4. a custom database - Input will be considered as the database, and will be used as reference")
     diamond_args.add_argument(
-        "-t", "--threads", type=int, default=os.sched_getaffinity(0),
+        "-t", "--threads", type=int, default=len(os.sched_getaffinity(0)),
         help="Number of threads to use in annotation steps [all available]")
     diamond_args.add_argument(
         "--evalue", type=float, default=1e-3, help="Maximum e-value to report annotations for [1e-3]")
