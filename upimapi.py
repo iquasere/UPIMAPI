@@ -35,19 +35,44 @@ def load_api_info():
     return yaml.safe_load(requests.get('https://rest.uniprot.org/docs/uniprot-openapi3.yaml').text)
 
 
+class UniProtServerError(Exception):
+    pass
+
+
+def is_server_side_error(response):
+    if 500 <= response.status_code < 600:
+        return True
+
+    try:
+        body = response.json()
+    except ValueError:
+        return False
+
+    return (
+        body.get('jobStatus') == 'ERROR'
+        and any(
+            error.get('code') == 50
+            for error in body.get('errors', [])
+        )
+    )
+
+
 def get_url(url, max_tries = 3, **kwargs):
-    tries = 0
-    response = None
-    while tries < max_tries + 1:
+    for attempt in range(max_tries):
         try:
             response = requests.get(url, **kwargs)
-            if response.ok:
-                return response
-        except:
-            tries += 1
+        except requests.exceptions.RequestException:
+            if attempt == max_tries - 1:
+                raise
             sleep(5)
-    response.raise_for_status()
-    sys.exit(response.txt)
+            continue
+        if response.ok:
+            return response
+
+        if is_server_side_error(response):
+            raise UniProtServerError(
+                f'UniProt server-side failure (HTTP {response.status_code}): {response.text}')
+        response.raise_for_status()
 
 
 def get_uniprot_columns():
@@ -329,7 +354,7 @@ def basic_idmapping(ids, from_db, to_db):
     return result
 
 
-def basic_idmapping_batch(ids, from_db, to_db, step=1000):
+def basic_idmapping_batch(ids, from_db, to_db, step=1000, max_tries=3):
     """
     Allows to retrieve millions of IDs at once, there seems to be some limit causing UniProt's API to fail with
     "Request Entity Too Large for url".
@@ -341,24 +366,28 @@ def basic_idmapping_batch(ids, from_db, to_db, step=1000):
     """
     result = pd.DataFrame()
     for i in tqdm(range(0, len(ids), step), desc='Getting valid UniProt IDs', ascii=' >='):
+        j = min(i + step, len(ids))
         done = False
+        attempts = 0
         while not done:
-            j = min(i + step, len(ids))
+            attempts += 1
             try:
                 result = pd.concat([result, basic_idmapping(ids[i:j], from_db, to_db)])
                 done = True
-            except:
+            except UniProtServerError:
+                if attempts >= max_tries:
+                    raise
                 sleep(3)
     return result
 
 
-def basic_idmapping_multiprocess(ids, output, from_db, to_db, step=1000, threads=15):
+def basic_idmapping_multiprocess(ids, output, from_db, to_db, step=1000, threads=15, max_tries=3):
     result = pd.DataFrame()
     ids_groups = split_list(ids, threads)
     with Manager() as m:
         with m.Pool() as p:
             mapping_results = p.starmap(basic_idmapping_batch, [(
-                ids_group, from_db, to_db, step) for ids_group in ids_groups])
+                ids_group, from_db, to_db, step, max_tries) for ids_group in ids_groups])
     for res in mapping_results:
         result = pd.concat([result, res])
     timed_message(f'{result["from"].unique().size} IDs were successfully mapped.')
@@ -376,7 +405,7 @@ def get_valid_entries(ids):
     return valid_entries
 
 
-def get_valid_entries_batch(ids, step=1000):
+def get_valid_entries_batch(ids, step=1000, max_tries=3):
     """
     Allows to retrieve millions of IDs at once, there seems to be some limit causing UniProt's API to fail with
     "Request Entity Too Large for url".
@@ -386,23 +415,27 @@ def get_valid_entries_batch(ids, step=1000):
     """
     valid_entries = []
     for i in tqdm(range(0, len(ids), step), desc='Getting valid UniProt IDs', ascii=' >='):
+        j = min(i + step, len(ids))
         done = False
+        attempts = 0
         while not done:
-            j = min(i + step, len(ids))
+            attempts += 1
             try:
                 valid_entries += get_valid_entries(ids[i:j])
                 done = True
-            except:
+            except UniProtServerError:
+                if attempts >= max_tries:
+                    raise
                 sleep(3)
     return valid_entries
 
 
-def get_valid_entries_multiprocess(ids, step=1000, threads=15):
+def get_valid_entries_multiprocess(ids, step=1000, threads=15, max_tries=3):
     valid_entries = []
     ids_groups = split_list(ids, threads)
     with Manager() as m:
         with m.Pool() as p:
-            result = p.starmap(get_valid_entries_batch, [(ids_group, step) for ids_group in ids_groups])
+            result = p.starmap(get_valid_entries_batch, [(ids_group, step, max_tries) for ids_group in ids_groups])
     for res in result:
         valid_entries += res
     not_valid = [ide for ide in ids if ide not in valid_entries]
@@ -1396,12 +1429,12 @@ def upimapi():
         table_output = f'{args.output}/uniprotinfo.tsv'
 
     if args.from_db != 'UniProtKB AC/ID' or args.to_db != 'UniProtKB':
-        basic_idmapping_multiprocess(ids, table_output, args.from_db, args.to_db, threads=args.threads)
+        basic_idmapping_multiprocess(ids, table_output, args.from_db, args.to_db, threads=args.threads, max_tries=args.max_tries)
         return
 
     if not args.skip_id_checking:
         # UniProt's API now fails if outdated IDs or entry names are submitted. This function removes those IDs.
-        ids, not_valid = get_valid_entries_multiprocess(ids, threads=args.threads)
+        ids, not_valid = get_valid_entries_multiprocess(ids, threads=args.threads, max_tries=args.max_tries)
         with open(f'{args.output}/valid_ids.txt', 'w') as f:
             f.write('\n'.join(ids))
         with open(f'{args.output}/not_valid_ids.txt', 'w') as f:
