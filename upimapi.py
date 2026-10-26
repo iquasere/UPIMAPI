@@ -28,7 +28,7 @@ import numpy as np
 from functools import partial
 import re
 
-__version__ = '1.13.3'
+__version__ = '1.14.0'
 
 
 def load_api_info():
